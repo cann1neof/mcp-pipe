@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseConfig } from '../src/config.js';
+import { parseConfig, expandEnv } from '../src/config.js';
 
 describe('parseConfig', () => {
   it('accepts stdio and http entries', () => {
@@ -11,5 +11,9 @@ describe('parseConfig', () => {
   });
   it('rejects missing mcpServers', () => {
     expect(() => parseConfig({})).toThrow(/mcpServers/);
+  });
+  it('expands ${env:VAR}', () => {
+    expect(expandEnv({ a: ['x-${env:T1}'] }, { T1: 'y' })).toEqual({ a: ['x-y'] });
+    expect(() => expandEnv('${env:NOPE_X}', {})).toThrow(/NOPE_X/);
   });
 });
