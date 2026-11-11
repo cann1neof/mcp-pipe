@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+*.db
+*.db-*
+.env
+bench/results/*.tmp.json
