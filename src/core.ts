@@ -160,6 +160,10 @@ export class PipeCore {
       };
     }
     const { structuredContent, ...rest } = result;
-    return { ...rest, ...(structuredContent !== undefined ? { structuredContent } : {}), content: [...(result.content ?? []), m] };
+    // A failed downstream call is usually fixed by changing one argument: say how, so the retry carries only the change.
+    const hint = rec.isError && rec.server !== 'pipe'
+      ? [{ type: 'text' as const, text: `To retry with changed arguments, send only the change: pipe__patch {"call":"${rec.id}","edits":[{"find":"…","replace":"…"}]}` }]
+      : [];
+    return { ...rest, ...(structuredContent !== undefined ? { structuredContent } : {}), content: [...(result.content ?? []), ...hint, m] };
   }
 }

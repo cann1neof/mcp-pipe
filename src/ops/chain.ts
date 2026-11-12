@@ -44,6 +44,9 @@ export const runOp: Op = {
     name: 'pipe__run',
     description:
       'Run a multi-step plan in one request: pass a new "chain", an existing "run" id, or a saved "recipe" name with "params". ' +
+      'Use it as soon as you know the remaining steps — typically after a few single calls to look at the inputs — and ' +
+      'especially when one step\'s result feeds the next: the steps run back to back without a round trip to you, ' +
+      'intermediate results stay stored instead of passing through the conversation, and a failed step is fixed in place. ' +
       `${CHAIN_FORMAT} ` +
       'The reply lists each step\'s output handle and the last step\'s result. A failing step stops the run; fix it with ' +
       'pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. Plans with tools that can ' +

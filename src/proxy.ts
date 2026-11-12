@@ -17,11 +17,12 @@ export { marker } from './core.js';
 const INSTRUCTIONS =
   'Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call ' +
   '(its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a ' +
-  'stored value, so data can move between tools without being copied. pipe__patch re-runs a stored call with ' +
-  'modified arguments; pipe__get reads a stored value or part of it; pipe__transform reshapes one with jq; ' +
-  'pipe__map calls a tool once per item of a stored list. For work with several steps, pipe__run executes a whole ' +
-  'plan (a chain of tool calls, jq steps, per-item calls and pauses for judgement) in one request; working plans ' +
-  'can be saved as recipes (pipe__save) and run again by name.';
+  'stored value, so data can move between tools without being copied. To repeat a call with a change (after an ' +
+  'error, or to adjust it), use pipe__patch and send only the change instead of the whole call. pipe__get reads a ' +
+  'stored value or part of it; pipe__transform reshapes one with jq; pipe__map calls a tool once per item of a stored ' +
+  'list. For work with several steps: look at the inputs with single calls first, then write the remaining steps as ' +
+  'one plan and execute it with pipe__run (tool calls, jq steps, per-item calls and pauses for judgement) instead of ' +
+  'calling the tools one by one. Working plans can be saved as recipes (pipe__save) and run again by name.';
 
 export const OPS: Op[] = [getOp, patchAnyOp, transformOp, mapOp, runOp, defineOp, resumeOp, saveOp, recipesOp];
 

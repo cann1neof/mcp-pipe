@@ -20,6 +20,13 @@ describe('proxy', () => {
     expect(t[1]).toMatch(/^⟨pipe:c\d+⟩$/);
     expect(r.content).toHaveLength(2);
   });
+  it('a failed call ends with a pipe__patch hint before the marker', async () => {
+    const r = await h.call('echo__fail', {});
+    const t = texts(r);
+    expect(r.isError).toBe(true);
+    expect(t.at(-2)).toMatch(/^To retry with changed arguments, send only the change: pipe__patch \{"call":"c\d+"/);
+    expect(t.at(-1)).toMatch(/^⟨pipe:c\d+⟩$/);
+  });
   it('call is recorded with args and result', async () => {
     const r = await h.call('echo__echo', { text: 'rec' });
     const id = texts(r).at(-1)!.slice(6, -1);
