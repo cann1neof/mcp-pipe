@@ -65,7 +65,10 @@ export async function runAgent(opts: {
   maxTurns?: number;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   createMessage?: CreateMessage;
+  /** Called with human-readable lines as the run progresses (for --verbose). */
+  log?: (line: string) => void;
 }): Promise<AgentRun> {
+  const log = opts.log ?? (() => {});
   const create: CreateMessage = opts.createMessage ?? ((p) => new Anthropic().messages.create(p));
   const tools = await opts.tools.tools();
   const system = [opts.system, opts.tools.instructions()].filter(Boolean).join('\n\n') || undefined;
@@ -90,6 +93,11 @@ export async function runAgent(opts: {
     run.cacheWriteTokens += res.usage.cache_creation_input_tokens ?? 0;
     run.outputTokens += res.usage.output_tokens;
     run.stopReason = res.stop_reason;
+    log(`  ── turn ${run.turns}: in=${res.usage.input_tokens + (res.usage.cache_read_input_tokens ?? 0) + (res.usage.cache_creation_input_tokens ?? 0)} out=${res.usage.output_tokens} stop=${res.stop_reason}`);
+    for (const b of res.content) {
+      if (b.type === 'text' && b.text.trim()) log(`  AI: ${b.text.trim()}`);
+      if (b.type === 'tool_use') log(`  → ${b.name} ${clip(JSON.stringify(b.input), 600)}`);
+    }
     // Append the full content (thinking blocks included) so the next turn is valid.
     messages.push({ role: 'assistant', content: res.content });
 
@@ -106,6 +114,7 @@ export async function runAgent(opts: {
       } catch (e) {
         r = { text: `tool call failed: ${(e as Error).message}`, isError: true };
       }
+      log(`  ← ${r.isError ? 'ERROR ' : ''}${clip(r.text, 300)}`);
       run.toolCalls.push({ name: block.name, args: block.input, isError: r.isError, text: r.text });
       results.push({ type: 'tool_result', tool_use_id: block.id, content: r.text, is_error: r.isError });
     }
@@ -113,4 +122,9 @@ export async function runAgent(opts: {
   }
   run.error = 'max turns reached';
   return run;
+}
+
+function clip(s: string, max: number): string {
+  const flat = s.replace(/\s+/g, ' ');
+  return flat.length > max ? `${flat.slice(0, max)}… (${flat.length} chars)` : flat;
 }
