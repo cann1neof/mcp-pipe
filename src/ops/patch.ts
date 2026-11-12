@@ -1,7 +1,7 @@
 import { parsePath, resolvePath, setPath, formatPath, type PathSeg } from '../refs.js';
 import { text, type Op } from './context.js';
 
-type Edit = { find: string; replace: string; path?: string } | { path: string; set: unknown };
+export type Edit = { find: string; replace: string; path?: string } | { path: string; set: unknown };
 
 /** Replaces every occurrence of `find` in all string leaves of `v`. Returns [newValue, count]. */
 function replaceAll(v: unknown, find: string, replace: string): [unknown, number] {
@@ -23,10 +23,12 @@ function replaceAll(v: unknown, find: string, replace: string): [unknown, number
   return [v, 0];
 }
 
-export function applyEdits(args: unknown, edits: Edit[]): unknown {
-  let cur = structuredClone(args);
+/** Applies edits to a copy of `target`. Throws (naming the edit) if a find has no match. */
+export function applyEdits(target: unknown, edits: Edit[]): unknown {
+  let cur = structuredClone(target);
   edits.forEach((e, i) => {
     const where = `edit ${i + 1}`;
+    if (e === null || typeof e !== 'object') throw new Error(`${where}: must be an object`);
     if ('set' in e) {
       if (typeof e.path !== 'string') throw new Error(`${where}: "set" needs "path"`);
       cur = setPath(cur, parsePath(e.path), e.set);
@@ -37,8 +39,8 @@ export function applyEdits(args: unknown, edits: Edit[]): unknown {
     }
     if (e.find === '') throw new Error(`${where}: "find" must not be empty`);
     const path: PathSeg[] = e.path ? parsePath(e.path) : [];
-    const target = resolvePath(cur, path);
-    const [next, count] = replaceAll(target, e.find, e.replace);
+    const sub = resolvePath(cur, path);
+    const [next, count] = replaceAll(sub, e.find, e.replace);
     if (count === 0) {
       throw new Error(`${where}: no match for ${JSON.stringify(e.find)}${path.length ? ` in ${formatPath(path)}` : ''}`);
     }
@@ -47,19 +49,41 @@ export function applyEdits(args: unknown, edits: Edit[]): unknown {
   return cur;
 }
 
+export function editsOf(args: Record<string, unknown>): Edit[] {
+  const edits = args.edits ?? [];
+  if (!Array.isArray(edits)) throw new Error('"edits" must be an array');
+  return edits as Edit[];
+}
+
+/** Patch of a single stored call (the chain form, with "run" + "step", is added by the run ops). */
+export async function patchCall(args: Record<string, unknown>, core: import('../core.js').PipeCore) {
+  const id = String(args.call ?? '').trim().replace(/^\$/, '').replace(/\.(in|out)$/, '');
+  const orig = core.store.getCall(id);
+  if (!orig) throw new Error(`unknown handle ${id}`);
+  if (orig.server === 'pipe') throw new Error(`${id} is an mcp-pipe operation, not a tool call; patch the run step instead`);
+  const newArgs = applyEdits(orig.args, editsOf(args));
+  if (args.run === false) {
+    const rec = core.store.putCall({ session: core.session, server: orig.server, tool: orig.tool, args: newArgs, parent: orig.id });
+    return text(`created ${rec.id} (patched from ${orig.id}, not run). Run it with pipe__patch {"call":"${rec.id}"}, or read it with pipe__get {"handle":"${rec.id}.in"}.`);
+  }
+  const rec = await core.invoke({ server: orig.server, tool: orig.tool, args: newArgs, parent: orig.id });
+  return core.respond(rec);
+}
+
+export const PATCH_DESCRIPTION =
+  'Re-run an earlier tool call with modified arguments. The call\'s stored arguments are copied, ' +
+  'the edits are applied to the copy, and the result is executed as a new call with its own handle. ' +
+  'Edit forms: {find, replace} replaces text in string arguments (all of them, or only under "path"); ' +
+  '{path, set} sets the value at "path". With no edits the call is re-run unchanged.';
+
 export const patchOp: Op = {
   def: {
     name: 'pipe__patch',
-    description:
-      'Fix a previous tool call without rewriting it: copy its arguments, apply small edits, and run it again. ' +
-      'Use this instead of re-sending a long query/document with one mistake. ' +
-      'Edits: {find, replace} replaces every occurrence of the text in all string arguments ' +
-      '(or only under "path", e.g. "sql"); {path, set} sets one argument to a new value. ' +
-      'With no edits it simply reruns the call. Returns the new call\'s result with its own handle; the original is kept.',
+    description: PATCH_DESCRIPTION,
     inputSchema: {
       type: 'object',
       properties: {
-        call: { type: 'string', description: 'handle of the call to fix, e.g. "c3"' },
+        call: { type: 'string', description: 'handle of the call, e.g. "c3"' },
         edits: {
           type: 'array',
           items: {
@@ -67,27 +91,15 @@ export const patchOp: Op = {
             properties: {
               find: { type: 'string' },
               replace: { type: 'string' },
-              path: { type: 'string', description: 'argument path, e.g. "sql" or "rows[0].name"' },
+              path: { type: 'string', description: 'path inside the arguments, e.g. "a.b[0]"' },
               set: { description: 'new value for "path"' },
             },
           },
         },
-        run: { type: 'boolean', description: 'run the patched call (default true)' },
+        run: { type: 'boolean', description: 'execute the new call (default true); false only stores it' },
       },
       required: ['call'],
     },
   },
-  async handle(args, { store, session, execute }) {
-    const id = String(args.call ?? '').replace(/^\$/, '').replace(/\.in$|\.out$/, '');
-    const orig = store.getCall(id);
-    if (!orig) throw new Error(`unknown handle ${id}`);
-    const edits = args.edits ?? [];
-    if (!Array.isArray(edits)) throw new Error('"edits" must be an array');
-    const newArgs = applyEdits(orig.args, edits as Edit[]);
-    const rec = store.putCall({ session, server: orig.server, tool: orig.tool, args: newArgs, parent: orig.id });
-    if (args.run === false) {
-      return text(`created ${rec.id} (patched from ${orig.id}, not run). Run it with pipe__patch {call:"${rec.id}"} (no edits = rerun as-is), or inspect with pipe__get {handle:"${rec.id}.in"}.`);
-    }
-    return execute(rec);
-  },
+  handle: patchCall,
 };

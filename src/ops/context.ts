@@ -1,22 +1,19 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import type { DownstreamPool } from '../downstream.js';
-import type { Store } from '../store/store.js';
-import type { CallRecord, CallToolResult } from '../types.js';
-
-export type OpContext = {
-  pool: DownstreamPool;
-  store: Store;
-  session: string;
-  /** Records + executes a downstream call, returns the stored record and the result with the handle marker. */
-  execute(rec: CallRecord): Promise<CallToolResult>;
-};
+import type { PipeCore } from '../core.js';
+import type { CallToolResult } from '../types.js';
 
 export type Op = {
   def: Tool;
-  handle(args: Record<string, unknown>, ctx: OpContext): Promise<CallToolResult>;
+  handle(args: Record<string, unknown>, core: PipeCore): Promise<CallToolResult>;
 };
 
-export const text = (t: string, isError = false): CallToolResult => ({
-  content: [{ type: 'text', text: t }],
+export { textResult as text } from '../core.js';
+
+/** JSON reply plus the handle marker of the record it describes. */
+export const json = (v: unknown, handle?: string, isError = false): CallToolResult => ({
+  content: [
+    { type: 'text', text: JSON.stringify(v, null, 2) },
+    ...(handle ? [{ type: 'text' as const, text: `⟨pipe:${handle}⟩` }] : []),
+  ],
   ...(isError ? { isError: true } : {}),
 });
