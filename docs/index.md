@@ -18,8 +18,8 @@ features:
     details: A 60-line query with one wrong column is fixed with one find/replace edit and re-run — the AI does not send the query again.
   - title: Refs between tools
     details: '"{{ c3.out.rows | map(.id) }}" in any argument. Query rows go straight into a spreadsheet; the AI never copies them.'
-  - title: Plans and recipes
-    details: The AI writes a chain of steps once (calls, jq, per-item calls, pauses for judgement) and runs it in one request. Working plans are saved as recipes.
+  - title: Pipes
+    details: The AI writes a chain of steps once (calls, jq, per-item calls, pauses for judgement) and runs it in one request. Pipes worth keeping go into skills.
   - title: AI steps without the data
     details: Steps that need judgement pause the run. A subagent can read the input and resume it, so the main conversation never holds the data.
   - title: Blind mode

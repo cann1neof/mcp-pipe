@@ -5,10 +5,14 @@ type JSONSchema = Record<string, unknown>;
 export const REF_SCHEMA: JSONSchema = {
   type: 'string',
   pattern: '^\\s*\\{\\{[\\s\\S]*\\}\\}\\s*$',
-  description: 'reference to a stored value: {{ <handle>[.path] [| jq] }}',
+  description: 'a saved result instead of a literal value, e.g. "{{ c3.out }}", "{{ c3.out.rows }}" or "{{ c3.out | map(.id) }}"',
 };
 
-export const REF_HINT = 'Any argument may also be a reference "{{ <handle>[.path] [| jq] }}" to a stored value.';
+export const REF_HINT =
+  'Every result ends with "saved as {{ cN.out }}". Any argument can take a saved result instead of a literal: ' +
+  '"{{ c3.out }}", a part "{{ c3.out.rows[0].id }}", or any jq expression over saved results ' +
+  '"{{ [["name","total"]] + (c3.out | map([.name, .total])) }}". ' +
+  'The value is filled in before the call, so data from one tool goes to the next without being copied.';
 
 const isPlainString = (p: unknown) =>
   !!p && typeof p === 'object' && (p as JSONSchema).type === 'string' && !('enum' in (p as JSONSchema)) && !('pattern' in (p as JSONSchema));

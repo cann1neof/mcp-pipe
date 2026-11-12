@@ -1,0 +1,141 @@
+prompt: count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics
+model: claude-opus-5-5
+server instructions: off
+  system: (none)
+  tools: chat__list_channels, chat__post_message, db__run_query, db__get_table_description, sheets__create_spreadsheet, sheets__update_values, sheets__get_values, pipe__get, pipe__patch, pipe__transform, pipe__map, pipe__run, pipe__resume
+  ── turn 1: in=4786 out=68 stop=tool_use
+  → db__get_table_description {"table":"users_data"}
+  ← {"table":"users_data","description":"Product analytics events. One row per user event.","columns":[{"name":"event_id","type":"INTEGER","description":"Unique identifier of the event."},{"name":"usr_id","type":"INTEGER","description":"Identifier of the user who performed the event."},{"name":"signup_date","type":"TEXT","description":"Date the user created their account (YYYY-MM-DD)."},{"name":"event_time","type":"TEXT","description":"UTC timestamp of the event (ISO 8601)."},{"name":"event_name","type":"TEXT","description":"Event type: login, page_view, purchase."},{"name":"country","type":"TEXT","description":"ISO 3166-1 alpha-2 country code of the user."},{"name":"plan","type":"TEXT","description":"Subscription plan at the time of the event: free, pro, team."}]}
+saved as {{ c1.out }}
+  ── turn 2: in=5169 out=140 stop=tool_use
+  → db__run_query {"sql":"SELECT MIN(signup_date), MAX(signup_date), MIN(event_time), MAX(event_time), COUNT(*), COUNT(DISTINCT usr_id), date('now') FROM users_data"}
+  ← ERROR Error: no such column: usr_id
+saved as {{ c2.out }}
+  ── turn 3: in=5344 out=88 stop=tool_use
+  → db__run_query {"sql":"SELECT name, type FROM pragma_table_info('users_data')"}
+  ← [{"name":"event_id","type":"INTEGER"},{"name":"user_id","type":"INTEGER"},{"name":"signup_date","type":"TEXT"},{"name":"event_time","type":"TEXT"},{"name":"event_name","type":"TEXT"},{"name":"country","type":"TEXT"},{"name":"plan","type":"TEXT"}]
+saved as {{ c3.out }}
+  ── turn 4: in=5578 out=122 stop=tool_use
+  → db__run_query {"sql":"SELECT MIN(signup_date), MAX(signup_date), MIN(event_time), MAX(event_time), COUNT(*), COUNT(DISTINCT user_id), date('now') AS today FROM users_data"}
+  ← [{"MIN(signup_date)":"2025-10-01","MAX(signup_date)":"2026-11-04","MIN(event_time)":"2025-10-01T14:04:25Z","MAX(event_time)":"2026-11-11T23:25:40Z","COUNT(*)":24943,"COUNT(DISTINCT user_id)":1500,"today":"2026-11-12"}]
+saved as {{ c4.out }}
+  ── turn 5: in=5851 out=754 stop=tool_use
+  → db__run_query {"sql":"WITH u AS (SELECT user_id, MIN(signup_date) sd, COUNT(DISTINCT signup_date) nsd FROM users_data GROUP BY user_id)\nSELECT SUM(nsd>1) multi_signup, SUM(sd BETWEEN '2026-07-01' AND '2026-09-30') q3_users,\n(SELECT COUNT(*) FROM users_data d JOIN u USING(user_id) WHERE date(d.event_time) < u.sd) events_before_signup,\n(SELECT COUNT(*) - COUNT(DISTINCT event_id) FROM users_data) dup_ids,\n(SELECT group_concat(DISTINCT event_name) FROM users_data) evs\nFROM u"}
+  ← [{"multi_signup":0,"q3_users":354,"events_before_signup":0,"dup_ids":0,"evs":"purchase,page_view,login"}]
+saved as {{ c5.out }}
+  ── turn 6: in=6678 out=1139 stop=tool_use
+  AI: Data is clean. Now compute retention for Q3 2026 signup cohorts (last full quarter; today is 2026‑11‑12).
+  → db__run_query {"sql":"WITH u AS (SELECT user_id, MIN(signup_date) sd FROM users_data GROUP BY user_id HAVING sd BETWEEN '2026-07-01' AND '2026-09-30'),\na AS (SELECT DISTINCT d.user_id, CAST(julianday(date(d.event_time)) - julianday(u.sd) AS INT) dn FROM users_data d JOIN u USING(user_id)),\nr AS (SELECT u.user_id, strftime('%Y-%m', u.sd) cohort,\n  MAX(a.dn=1) d1, MAX(a.dn BETWEEN 7 AND 13) d7, MAX(a.dn BETWEEN 30 AND 36) d30\n  FROM u LEFT JOIN a USING(user_id) GROUP BY u.user_id)\nSELECT cohort, COUNT(*) users, SUM(d1) d1_users, ROUND(100.0*SUM(d1)/COUNT(*),1) d1_pct,\n SUM(d7) d7_users, ROUND(100.0*SUM(d7)/COUNT(*),1) d7_pct, SUM(d30) d30_users, ROUND(100.0*SUM(d30)/COUNT(*),1) d30_pct\nFROM r GROUP BY ROLLUP_cohort_placeholder"}
+  → db__run_query {"sql":"WITH u AS (SELECT user_id, MIN(signup_date) sd FROM users_data GROUP BY user_id HAVING sd BETWEEN '2026-07-01' AND '2026-09-30'),\na AS (SELECT DISTINCT d.user_id, CAST(julianday(date(d.event_time)) - julianday(u.sd) AS INT) dn FROM users_data d JOIN u USING(user_id)),\nr AS (SELECT u.user_id, strftime('%Y-%m', u.sd) cohort,\n  COALESCE(MAX(a.dn=1),0) d1, COALESCE(MAX(a.dn BETWEEN 7 AND 13),0) d7, COALESCE(MAX(a.dn BETWEEN 30 AND 36),0) d30\n  FROM u LEFT JOIN a USING(user_id) GROUP BY u.user_id),\nc AS (SELECT cohort, d1, d7, d30 FROM r UNION ALL SELECT 'Q3 2026 total', d1, d7, d30 FROM r)\nSELECT cohort, COUNT(*) users, SUM(d1) d1_users, ROUND(100.0*SUM(d1)/COUNT(*),1) d1_pct,\n SUM(d7) d7_users, ROUND(100.0*SUM(d7)/COUNT(*),1) d7_pct, SUM(d30) d30_users, ROUND(100.0*SUM(d30)/COUNT(*),1) d30_pct\nFROM c GROUP BY cohort ORDER BY cohort"}
+  ← ERROR Error: no such column: ROLLUP_cohort_placeholder
+saved as {{ c6.out }}
+  ← [{"cohort":"2026-07","users":121,"d1_users":38,"d1_pct":31.4,"d7_users":82,"d7_pct":67.8,"d30_users":59,"d30_pct":48.8},{"cohort":"2026-08","users":118,"d1_users":36,"d1_pct":30.5,"d7_users":77,"d7_pct":65.3,"d30_users":61,"d30_pct":51.7},{"cohort":"2026-09","users":115,"d1_users":43,"d1_pct":37.4,"d7_users":71,"d7_pct":61.7,"d30_users":52,"d30_pct":45.2},{"cohort":"Q3 2026 total","users":354,"d1_users":117,"d1_pct":33.1,"d7_users":230,"d7_pct":65,"d30_users":172,"d30_pct":48.6}]
+saved as {{ c7.out }}
+  ── turn 7: in=8221 out=72 stop=tool_use
+  → sheets__create_spreadsheet {"title":"Retention – Q3 2026 signup cohorts"}
+  ← {"spreadsheet_id":"sh1","url":"https://sheets.example.com/sh1"}
+saved as {{ c8.out }}
+  ── turn 8: in=8345 out=307 stop=tool_use
+  → sheets__update_values {"spreadsheet_id":"sh1","start_cell":"A1","values":"{{ [[\"Signup cohort\",\"Users\",\"D1 retained\",\"D1 %\",\"D7 retained (days 7-13)\",\"D7 %\",\"D30 retained (days 30-36)\",\"D30 %\"]] + (c7.out | map([.cohort,.users,.d1_users,.d1_pct,.d7_users,.d7_pct,.d30_users,.d30_pct])) + [[],[\"Definition: users who signed up 2026-07-01 to 2026-09-30; retained = any event (login/page_view/purchase) in the given window, counted in days after signup. Source: users_data, data through 2026-11-11.\"]] }}"}
+  ← ERROR mcp-pipe: call failed: bad reference "{{ [["Signup cohort","Users","D1 retained","D1 %","D7 retained (days 7-13)","D7 %","D30 retained (days 30-36)","D30 %"]] + (c7.out | map([.cohort,.users,.d1_users,.d1_pct,.d7_users,.d7_pct,.d30_users,.d30_pct])) + [[],["Definition: users who signed up 2026-07-01 to 2026-09-30; retained = any event (login/page_view/purchase) in the given window, counted in days after signup. Source: users_data, data through 2026-11-11."]] }}": expected a handle like c3.out or a name in "{{ [["Signup cohort","Users","D1 retained","D1 %","D7 retained (days 7-13)","D7 %","D30 retained (days 30-36)","D30 %"]] + (c7.out | map([.cohort,.users,.d1_users,.d1_pct,.d7_users,.d7_pct,.d30_users,.d30_pct])) + [[],["Definition: users who signed up 2026-07-01 to 2026-09-30; retained = any event (login/page_view/purchase) in the given window, counted in days after signup. Source: users_data, data through 2026-11-11."]] }}" (to send literal braces, write \{{)
+saved as {{ c9.out }}
+  ── turn 9: in=9127 out=263 stop=tool_use
+  → pipe__transform {"from":"c7.out","jq":"[[\"Signup cohort\",\"Users\",\"D1 retained\",\"D1 %\",\"D7 retained (days 7-13)\",\"D7 %\",\"D30 retained (days 30-36)\",\"D30 %\"]] + map([.cohort,.users,.d1_users,.d1_pct,.d7_users,.d7_pct,.d30_users,.d30_pct]) + [[\"\"],[\"Definition: users who signed up 2026-07-01 to 2026-09-30; retained = any event (login/page_view/purchase) in the window, in days after signup. Source: users_data, data through 2026-11-11.\"]]"}
+  ← [["Signup cohort","Users","D1 retained","D1 %","D7 retained (days 7-13)","D7 %","D30 retained (days 30-36)","D30 %"],["2026-07",121,38,31.4,82,67.8,59,48.8],["2026-08",118,36,30.5,77,65.3,61,51.7],["2026-09",115,43,37.4,71,61.7,52,45.2],["Q3 2026 total",354,117,33.1,230,65,172,48.6],[""],["Definition: users who signed up 2026-07-01 to 2026-09-30; retained = any event (login/page_view/purchase) in the window, in days after signup. Source: users_data, data through 2026-11-11."]]
+saved as {{ c10.out }}
+  ── turn 10: in=9649 out=114 stop=tool_use
+  → sheets__update_values {"spreadsheet_id":"sh1","start_cell":"A1","values":"{{ c10.out }}"}
+  ← {"updated_cells":42}
+saved as {{ c11.out }}
+  ── turn 11: in=9791 out=331 stop=tool_use
+  → chat__post_message {"channel":"analytics","text":"**Retention – Q3 2026 signup cohorts** (Jul 1 – Sep 30, 354 new users)\n\n• **D1:** 33.1%\n• **D7** (active days 7–13): 65.0%\n• **D30** (active days 30–36): 48.6%\n\nBy month (D1 / D7 / D30):\n• Jul: 31.4% / 67.8% / 48.8%\n• Aug: 30.5% / 65.3% / 51.7%\n• Sep: 37.4% / 61.7% / 45.2%\n\nSeptember had the best D1 but the weakest D7 and D30.\n\"Retained\" means the user had any event (login, page_view or purchase) in that window. Source: `users_data`, data through 2026-11-11.\nSheet: https://sheets.example.com/sh1"}
+  ← {"ok":true,"channel":"analytics","ts":"2026-11-12T13:52:32.660Z"}
+saved as {{ c12.out }}
+  ── turn 12: in=10178 out=540 stop=end_turn
+  AI: I worked out retention for last quarter, put the numbers in a new spreadsheet, and posted a summary with the link to #analytics.
+
+**What I measured:** Today is 2026‑11‑12, so "last quarter" is Q3 2026. That's the 354 users who signed up between Jul 1 and Sep 30. A user counts as retained if they did anything (login, page view or purchase) during the window:
+- **D1:** the day after signup
+- **D7:** days 7–13 after signup
+- **D30:** days 30–36 after signup
+
+The data runs to 2026‑11‑11, so the D30 window is complete for every Q3 signup.
+
+| Signup month | Users | D1 | D7 | D30 |
+|---|---|---|---|---|
+| Jul 2026 | 121 | 31.4% | 67.8% | 48.8% |
+| Aug 2026 | 118 | 30.5% | 65.3% | 51.7% |
+| Sep 2026 | 115 | 37.4% | 61.7% | 45.2% |
+| **Q3 total** | **354** | **33.1%** | **65.0%** | **48.6%** |
+
+September's signups had the best D1 but the weakest D7 and D30.
+
+D7 is higher than D1 because D1 covers a single day while D7 covers seven. If you'd rather use different windows, or count a user as retained if they're active on day N or any time after, I can rerun it.
+
+The table's description says the user column is `usr_id`, but it's actually `user_id`. Someone may want to fix the description.
+
+**Spreadsheet:** https://sheets.example.com/sh1
+
+== done: 12 turns, 12 tool calls, in=88717 out=3938
+
+== sheets.json
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "Retention – Q3 2026 signup cohorts",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "D1 retained",
+      "D1": "D1 %",
+      "E1": "D7 retained (days 7-13)",
+      "F1": "D7 %",
+      "G1": "D30 retained (days 30-36)",
+      "H1": "D30 %",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": 38,
+      "D2": 31.4,
+      "E2": 82,
+      "F2": 67.8,
+      "G2": 59,
+      "H2": 48.8,
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": 36,
+      "D3": 30.5,
+      "E3": 77,
+      "F3": 65.3,
+      "G3": 61,
+      "H3": 51.7,
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": 43,
+      "D4": 37.4,
+      "E4": 71,
+      "F4": 61.7,
+      "G4": 52,
+      "H4": 45.2,
+      "A5": "Q3 2026 total",
+      "B5": 354,
+      "C5": 117,
+      "D5": 33.1,
+      "E5": 230,
+      "F5": 65,
+      "G5": 172,
+      "H5": 48.6,
+      "A6": "",
+      "A7": "Definition: users who signed up 2026-07-01 to 2026-09-30; retained = any event (login/page_view/purchase) in the window, in days after signup. Source: users_data, data through 2026-11-11."
+    }
+  }
+}
+
+== chat.json
+[
+  {
+    "channel": "analytics",
+    "text": "**Retention – Q3 2026 signup cohorts** (Jul 1 – Sep 30, 354 new users)\n\n• **D1:** 33.1%\n• **D7** (active days 7–13): 65.0%\n• **D30** (active days 30–36): 48.6%\n\nBy month (D1 / D7 / D30):\n• Jul: 31.4% / 67.8% / 48.8%\n• Aug: 30.5% / 65.3% / 51.7%\n• Sep: 37.4% / 61.7% / 45.2%\n\nSeptember had the best D1 but the weakest D7 and D30.\n\"Retained\" means the user had any event (login, page_view or purchase) in that window. Source: `users_data`, data through 2026-11-11.\nSheet: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T13:52:32.660Z"
+  }
+]

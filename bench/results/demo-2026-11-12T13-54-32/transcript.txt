@@ -1,0 +1,168 @@
+prompt: use the retention-report skill: retention for the last quarter from table `users_data`, post it to #analytics
+
+<skill name="retention-report">
+---
+name: retention-report
+description: Monthly signup-cohort retention for a quarter from the events table, written to a new spreadsheet and summarised in a chat channel. Use when asked for a retention report.
+---
+
+# Retention report
+
+Run the pipe below with `pipe__run`: pass the YAML as `chain` and fill in `params`
+(`table`, `user_col`, `from`, `to` as dates `YYYY-MM-DD`, and `channel`).
+If a tool or column name differs in this session, change it in the YAML before running.
+
+```yaml
+name: retention-report
+params: { table: string, user_col: string, from: string, to: string, channel: string }
+steps:
+  - id: cohorts
+    call: db__run_query
+    args:
+      sql: |
+        WITH u AS (SELECT {{ user_col }} AS uid, MIN(signup_date) AS sd FROM {{ table }} GROUP BY {{ user_col }}
+                   HAVING sd BETWEEN '{{ from }}' AND '{{ to }}'),
+             a AS (SELECT DISTINCT {{ user_col }} AS uid, substr(event_time, 1, 7) AS m FROM {{ table }})
+        SELECT substr(u.sd, 1, 7) AS cohort, COUNT(DISTINCT u.uid) AS users,
+          COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', substr(u.sd, 1, 7) || '-01', '+1 month') THEN u.uid END) AS m1,
+          COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', substr(u.sd, 1, 7) || '-01', '+2 month') THEN u.uid END) AS m2,
+          COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', substr(u.sd, 1, 7) || '-01', '+3 month') THEN u.uid END) AS m3
+        FROM u LEFT JOIN a ON a.uid = u.uid GROUP BY cohort ORDER BY cohort
+  - id: table_rows
+    jq: |
+      def pct(n; d): if d == 0 then "" else ((n * 1000 / d | round) / 10 | tostring) + "%" end;
+      [["Signup cohort", "Users", "Month 1", "Month 2", "Month 3"]]
+      + ($cohorts | map([.cohort, .users, pct(.m1; .users), pct(.m2; .users), pct(.m3; .users)]))
+  - id: sheet
+    call: sheets__create_spreadsheet
+    args: { title: "Retention {{ from }} to {{ to }}" }
+  - id: write
+    call: sheets__update_values
+    args: { spreadsheet_id: "{{ sheet.spreadsheet_id }}", start_cell: "A1", values: "{{ table_rows }}" }
+  - id: summary
+    jq: |
+      "*Retention, signups \($from) to \($to)*\n"
+      + ($table_rows[1:] | map("• \(.[0]): \(.[1]) users, month 1 \(.[2]), month 2 \(.[3]), month 3 \(.[4])") | join("\n"))
+      + "\nFull table: \($sheet.url)"
+  - id: post
+    call: chat__post_message
+    args: { channel: "{{ channel }}", text: "{{ summary }}" }
+```
+
+Months that are not over yet show partial numbers; say so when you report the result.
+If a step fails, fix it with `pipe__patch {"run": "<run id>", "step": "<step id>", "edits": [...]}`; the run continues from that step.
+</skill>
+model: claude-opus-5-5
+server instructions: off
+  system: (none)
+  tools: chat__list_channels, chat__post_message, db__run_query, db__get_table_description, sheets__create_spreadsheet, sheets__update_values, sheets__get_values, pipe__get, pipe__patch, pipe__transform, pipe__map, pipe__run, pipe__resume
+  ── turn 1: in=6147 out=189 stop=tool_use
+  → db__get_table_description {"table":"users_data"}
+  → db__run_query {"sql":"SELECT date('now') AS today"}
+  → chat__list_channels {}
+  ← {"table":"users_data","description":"Product analytics events. One row per user event.","columns":[{"name":"event_id","type":"INTEGER","description":"Unique identifier of the event."},{"name":"usr_id","type":"INTEGER","description":"Identifier of the user who performed the event."},{"name":"signup_date","type":"TEXT","description":"Date the user created their account (YYYY-MM-DD)."},{"name":"event_time","type":"TEXT","description":"UTC timestamp of the event (ISO 8601)."},{"name":"event_name","type":"TEXT","description":"Event type: login, page_view, purchase."},{"name":"country","type":"TEXT","description":"ISO 3166-1 alpha-2 country code of the user."},{"name":"plan","type":"TEXT","description":"Subscription plan at the time of the event: free, pro, team."}]}
+saved as {{ c1.out }}
+  ← [{"today":"2026-11-12"}]
+saved as {{ c2.out }}
+  ← ["general","analytics","product","random"]
+saved as {{ c3.out }}
+  ── turn 2: in=6790 out=1141 stop=tool_use
+  → pipe__run {"chain":"name: retention-report\nparams: { table: string, user_col: string, from: string, to: string, channel: string }\nsteps:\n  - id: cohorts\n    call: db__run_query\n    args:\n      sql: |\n        WITH u AS (SELECT {{ user_col }} AS uid, MIN(signup_date) AS sd FROM {{ table }} GROUP BY {{ user_col }}\n                   HAVING sd BETWEEN '{{ from }}' AND '{{ to }}'),\n             a AS (SELECT DISTINCT {{ user_col }} AS uid, substr(event_time, 1, 7) AS m FROM {{ table }})\n        SELECT substr(u.sd, 1, 7) AS cohort, COUNT(DISTINCT u.uid) AS users,\n          COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', substr(u.sd, 1, 7) || '-01', '+1 month') THEN u.uid END) AS m1,\n          COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', substr(u.sd, 1, 7) || '-01', '+2 month') THEN u.uid END) AS m2,\n          COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', substr(u.sd, 1, 7) || '-01', '+3 month') THEN u.uid END) AS m3\n        FROM u LEFT JOIN a ON a.uid = u.uid GROUP BY cohort ORDER BY cohort\n  - id: table_rows\n    jq: |\n      def pct(n; d): if d == 0 then \"\" else ((n * 1000 / d | round) / 10 | tostring) + \"%\" end;\n      [[\"Signup cohort\", \"Users\", \"Month 1\", \"Month 2\", \"Month 3\"]]\n      + ($cohorts | map([.cohort, .users, pct(.m1; .users), pct(.m2; .users), pct(.m3; .users)]))\n  - id: sheet\n    call: sheets__create_spreadsheet\n    args: { title: \"Retention {{ from }} to {{ to }}\" }\n  - id: write\n    call: sheets__update_values\n    args: { spreadsheet_id: \"{{ sheet.spreadsheet_id }}\", start_cell: \"A1\", values: \"{{ table_rows }}\" }\n  - id: summary\n    jq: |\n      \"*Retention, signups \\($from) to \\($to)*\\n\"\n      + ($table_rows[1:] | map(\"• \\(.[0]): \\(.[1]) users, month 1 \\(.[2]), month 2 \\(.[3]), month 3 \\(.[4])\") | join(\"\\n\"))\n      + \"\\nFull table: \\($sheet.url)\"\n  - id: post\n    call: chat__post_message\n    args: { channel: \"{{ channel }}\", text: \"{{ summary }}\" }","params":{"table":"users_data","user_col":"usr_id","from":"2026-07-01","to":"2026-09-30","channel":"analytics"}}
+  ← ERROR {
+  "status": "failed",
+  "run": "r1",
+  "step": "cohorts",
+  "error": "Error: no such column: usr_id",
+  "outputs": {},
+  "next": "fix it with pipe__patch {\"run\":\"r1\",\"step\":\"cohorts\",\"edits\":[…]} (re-runs from that step)"
+}
+  ── turn 3: in=8062 out=92 stop=tool_use
+  → db__run_query {"sql":"SELECT name FROM pragma_table_info('users_data')"}
+  ← [{"name":"event_id"},{"name":"user_id"},{"name":"signup_date"},{"name":"event_time"},{"name":"event_name"},{"name":"country"},{"name":"plan"}]
+saved as {{ c5.out }}
+  ── turn 4: in=8242 out=150 stop=tool_use
+  AI: The real column is `user_id` (the table description says `usr_id`, which is wrong).
+  → pipe__patch {"run":"r1","step":"cohorts","edits":[{"find":"{{ user_col }}","replace":"user_id"}]}
+  ← {
+  "status": "done",
+  "run": "r1",
+  "outputs": {
+    "cohorts": "c6.out",
+    "table_rows": "c7.out",
+    "sheet": "c8.out",
+    "write": "c9.out",
+    "summary": "c10.out",
+    "post": "c11.out"
+  },
+  "result": {
+    "ok": true,
+    "channel": "analytics",
+    "ts": "2026-11-12T13:54:47.558Z"
+  }
+}
+  ── turn 5: in=8555 out=53 stop=tool_use
+  → pipe__get {"handle":"c10.out"}
+  ← *Retention, signups 2026-07-01 to 2026-09-30*
+• 2026-07: 121 users, month 1 75.2%, month 2 40.5%, month 3 33.1%
+• 2026-08: 118 users, month 1 78.8%, month 2 54.2%, month 3 30.5%
+• 2026-09: 115 users, month 1 81.7%, month 2 41.7%, month 3 0%
+Full table: https://sheets.example.com/sh1
+  ── turn 6: in=8770 out=519 stop=end_turn
+  AI: I posted the retention report for last quarter (Q3 2026, signups from 1 July to 30 September) to #analytics. The full table is in a new spreadsheet: https://sheets.example.com/sh1
+
+| Signup cohort | Users | Month 1 | Month 2 | Month 3 |
+|---|---|---|---|---|
+| 2026-07 | 121 | 75.2% | 40.5% | 33.1% |
+| 2026-08 | 118 | 78.8% | 54.2% | 30.5%* |
+| 2026-09 | 115 | 81.7% | 41.7%* | 0%** |
+
+\* November isn't over yet (today is 12 Nov), so these numbers are partial and will go up.
+\** This month is December, which hasn't started, so 0% is a placeholder, not a real drop.
+
+The message in #analytics doesn't include these two notes, so someone could read the September month-3 figure as a real 0%.
+
+**Setup:** the skill failed at first because the table's description lists the user column as `usr_id`, but the actual column is `user_id`. I switched to `user_id` and reran it.
+
+I can post a follow-up in #analytics explaining the partial and placeholder numbers.
+
+== done: 6 turns, 7 tool calls, in=46566 out=2144
+
+== sheets.json
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "Retention 2026-07-01 to 2026-09-30",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "Month 1",
+      "D1": "Month 2",
+      "E1": "Month 3",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": "75.2%",
+      "D2": "40.5%",
+      "E2": "33.1%",
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": "78.8%",
+      "D3": "54.2%",
+      "E3": "30.5%",
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": "81.7%",
+      "D4": "41.7%",
+      "E4": "0%"
+    }
+  }
+}
+
+== chat.json
+[
+  {
+    "channel": "analytics",
+    "text": "*Retention, signups 2026-07-01 to 2026-09-30*\n• 2026-07: 121 users, month 1 75.2%, month 2 40.5%, month 3 33.1%\n• 2026-08: 118 users, month 1 78.8%, month 2 54.2%, month 3 30.5%\n• 2026-09: 115 users, month 1 81.7%, month 2 41.7%, month 3 0%\nFull table: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T13:54:47.558Z"
+  }
+]

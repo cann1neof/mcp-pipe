@@ -10,7 +10,7 @@ import { startHarness, texts, body } from '../harness.js';
 import { fixtureServer } from '../helpers.js';
 
 const TRANSLATE = `
-recipe: translate-deck
+name: translate-deck
 description: Translate every text box of a deck
 params: { deck_id: string, lang: string }
 steps:
@@ -87,19 +87,26 @@ describe('engine', () => {
     expect(p.status).toBe('done');
     expect(body(await h.call('echo__stats')).calls.rows).toBe(rowsBefore);
   });
-  it('write step requires confirm; plan lists every step', async () => {
+  it('write steps run directly by default', async () => {
     const w = { steps: [{ id: 'a', call: 'echo__rows', args: { n: 1 } }, { id: 'b', call: 'echo__echo', args: { text: 'hi' } }] };
-    const first = body(await h.call('pipe__run', { chain: w }));
-    expect(first.status).toBe('needs_confirm');
-    expect(first.plan.map((p: any) => p.step)).toEqual(['a', 'b']);
-    const ok = body(await h.call('pipe__run', { run: first.run, confirm: first.confirm }));
-    expect(ok).toMatchObject({ status: 'done', result: 'hi' });
+    expect(body(await h.call('pipe__run', { chain: w }))).toMatchObject({ status: 'done', result: 'hi' });
   });
-  it('dry_run and define do not execute', async () => {
+  it('with confirmWrites, a write step needs a confirm; plan lists every step', async () => {
+    const hc = await startHarness(undefined, { confirmWrites: true });
+    try {
+      const w = { steps: [{ id: 'a', call: 'echo__rows', args: { n: 1 } }, { id: 'b', call: 'echo__echo', args: { text: 'hi' } }] };
+      const first = body(await hc.call('pipe__run', { chain: w }));
+      expect(first.status).toBe('needs_confirm');
+      expect(first.plan.map((p: any) => p.step)).toEqual(['a', 'b']);
+      const ok = body(await hc.call('pipe__run', { run: first.run, confirm: first.confirm }));
+      expect(ok).toMatchObject({ status: 'done', result: 'hi' });
+    } finally { await hc.close(); }
+  });
+  it('dry_run does not execute', async () => {
     const before = body(await h.call('echo__stats')).calls.rows;
-    const d = body(await h.call('pipe__define', { chain }));
+    const d = body(await h.call('pipe__run', { chain, dry_run: true }));
+    expect(d).toMatchObject({ status: 'dry_run' });
     expect(d.run).toMatch(/^r\d+$/);
-    expect(body(await h.call('pipe__run', { run: d.run, dry_run: true })).status).toBe('dry_run');
     expect(body(await h.call('echo__stats')).calls.rows).toBe(before);
   });
   it('from re-runs a step using stored earlier outputs', async () => {
@@ -196,7 +203,7 @@ describe('ai steps', () => {
 
 describe('idempotent map steps', () => {
   it('failed map keeps finished items; patch + rerun skips them; force re-sends', async () => {
-    const h = await startHarness();
+    const h = await startHarness(undefined, { confirmWrites: true });
     try {
       // json fails for item 3 only via a jq-built arg that errors downstream: use bad_sql for odd items
       const c = {
@@ -238,49 +245,37 @@ describe('idempotent map steps', () => {
   });
 });
 
-describe('recipes', () => {
+describe('pipes passed as text (e.g. from a skill)', () => {
   let h: Awaited<ReturnType<typeof startHarness>>;
-  let dir: string;
-  beforeAll(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipe-recipes-'));
-    h = await startHarness(undefined, { recipesDir: dir });
-  });
+  beforeAll(async () => { h = await startHarness(); });
   afterAll(async () => { await h.close(); });
-  const c = { params: { n: 'number' }, steps: [{ id: 'rows', call: 'echo__rows', args: { n: '{{ n }}' } }, { id: 'count', jq: '$rows | length' }] };
-
-  it('save then run by name with params; list shows it', async () => {
-    const r = body(await h.call('pipe__run', { chain: c, params: { n: 4 } }));
-    expect(r.result).toBe(4);
-    const s = body(await h.call('pipe__save', { run: r.run, name: 'count-rows', description: 'Count rows' }));
-    expect(fs.existsSync(s.file)).toBe(true);
-    expect(fs.statSync(s.file).mode & 0o777).toBe(0o600);
-    expect(body(await h.call('pipe__run', { recipe: 'count-rows', params: { n: 7 } })).result).toBe(7);
-    expect(body(await h.call('pipe__recipes'))).toEqual([{ name: 'count-rows', description: 'Count rows', params: { n: 'number' } }]);
+  const yaml = `
+name: count-rows
+params: { n: number }
+steps:
+  - id: rows
+    call: echo__rows
+    args: { n: "{{ n }}" }
+  - id: count
+    jq: '$rows | length'
+`;
+  it('YAML text with params runs', async () => {
+    expect(body(await h.call('pipe__run', { chain: yaml, params: { n: 4 } })).result).toBe(4);
+    expect(body(await h.call('pipe__run', { chain: yaml, params: { n: 7 } })).result).toBe(7);
   });
   it('missing / wrong-type param → error before any step', async () => {
     const before = body(await h.call('echo__stats')).calls.rows;
-    expect(texts(await h.call('pipe__run', { recipe: 'count-rows', params: {} }))[0]).toMatch(/missing param "n"/);
-    expect(texts(await h.call('pipe__run', { recipe: 'count-rows', params: { n: 'x' } }))[0]).toMatch(/must be number, got string/);
+    expect(texts(await h.call('pipe__run', { chain: yaml, params: {} }))[0]).toMatch(/missing param "n"/);
+    expect(texts(await h.call('pipe__run', { chain: yaml, params: { n: 'x' } }))[0]).toMatch(/must be number, got string/);
     expect(body(await h.call('echo__stats')).calls.rows).toBe(before);
-  });
-  it('name with path chars rejected; overwrite guard', async () => {
-    const r = body(await h.call('pipe__run', { chain: c, params: { n: 1 } }));
-    expect(texts(await h.call('pipe__save', { run: r.run, name: '../evil' }))[0]).toMatch(/no paths/);
-    expect(texts(await h.call('pipe__save', { run: r.run, name: 'count-rows' }))[0]).toMatch(/already exists/);
-    expect(body(await h.call('pipe__save', { run: r.run, name: 'count-rows', overwrite: true })).saved).toBe('count-rows');
   });
 });
 
 describe('translate-deck end to end (scripted AI)', () => {
   it('every box updated, one pause per chunk, AI never sees the deck in the pause payload', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipe-e2e-'));
-    fs.writeFileSync(path.join(dir, 'translate-deck.yaml'), TRANSLATE);
-    const h = await startHarness({ slides: fixtureServer('slides-server') }, { recipesDir: dir });
+    const h = await startHarness({ slides: fixtureServer('slides-server') });
     try {
-      const plan = body(await h.call('pipe__run', { recipe: 'translate-deck', params: { deck_id: 'd1', lang: 'Hebrew' } }));
-      expect(plan.status).toBe('needs_confirm'); // the plan writes to the deck: one confirm up front covers the run
-      expect(plan.plan.map((p: any) => p.step)).toEqual(['boxes', 'tr', 'merged', 'write']);
-      const paused = body(await h.call('pipe__run', { run: plan.run, confirm: plan.confirm }));
+      const paused = body(await h.call('pipe__run', { chain: TRANSLATE, params: { deck_id: 'd1', lang: 'Hebrew' } }));
       expect(paused).toMatchObject({ status: 'paused', step: 'tr', by: 'subagent', task: 'Translate each item to Hebrew. Return a JSON array, same order, same length.' });
       expect(JSON.stringify(paused)).not.toContain('text 1');
       expect(paused.chunks).toHaveLength(3);
@@ -316,9 +311,13 @@ describe('store runs', () => {
   });
 });
 
-describe('example recipes', () => {
-  const dir = path.resolve(import.meta.dirname, '../../recipes/examples');
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.yaml'))) {
-    it(`${f} parses`, () => { expect(parseChain(fs.readFileSync(path.join(dir, f), 'utf8')).steps.length).toBeGreaterThan(0); });
+describe('example skills', () => {
+  const dir = path.resolve(import.meta.dirname, '../../examples/skills');
+  for (const f of fs.readdirSync(dir)) {
+    it(`${f}/SKILL.md pipe parses`, () => {
+      const md = fs.readFileSync(path.join(dir, f, 'SKILL.md'), 'utf8');
+      const yaml = /```yaml\n([\s\S]*?)```/.exec(md)![1]!;
+      expect(parseChain(yaml).steps.length).toBeGreaterThan(0);
+    });
   }
 });

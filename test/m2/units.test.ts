@@ -155,11 +155,10 @@ describe('secrets', () => {
 });
 
 describe('config paths', () => {
-  it('expands ~ in store.path and recipesDir', async () => {
+  it('expands ~ in store.path', async () => {
     const os = await import('node:os');
-    const c = parseConfig({ mcpServers: {}, store: { path: '~/x/store.db' }, recipesDir: '~/r' });
+    const c = parseConfig({ mcpServers: {}, store: { path: '~/x/store.db' } });
     expect(c.store!.path).toBe(`${os.homedir()}/x/store.db`);
-    expect(c.recipesDir).toBe(`${os.homedir()}/r`);
   });
 });
 

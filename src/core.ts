@@ -8,7 +8,8 @@ import { ConfirmTokens } from './security.js';
 import { errorText, hasBinary, preview, resultValue, shapeOf, textBytes } from './values.js';
 import { coerceJsonStrings } from './schema.js';
 
-export const marker = (id: string) => `⟨pipe:${id}⟩`;
+/** The label at the end of every result: the ref that passes this result to another tool. */
+export const marker = (id: string) => `saved as {{ ${id}.out }}`;
 export const DEFAULT_PEEK_BYTES = 8192;
 
 export class RefusedError extends Error {}

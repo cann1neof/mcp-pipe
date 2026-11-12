@@ -6,7 +6,6 @@
 |---|---|---|
 | every call's arguments and result | `~/.mcp-pipe/store.db` (SQLite, file mode 600) | `store.ttlDays`, default 7 days; purged on start and hourly |
 | runs (chains, step states) | same file | same |
-| recipes | `~/.mcp-pipe/recipes/*.yaml` (mode 600) | until you delete them |
 | server config | `~/.mcp-pipe/servers.json` (mode 600 when written by `import`) | — |
 
 `store.memoryOnly: true` keeps calls and runs in memory only.
@@ -18,9 +17,9 @@ Secrets: use `${env:VAR}` or `${keychain:service/account}` in `servers.json` ins
 - It never calls an AI model: no API keys, no MCP sampling. `ai` steps pause and wait for the AI in your conversation.
 - It sends nothing anywhere except to the MCP servers you configured.
 
-## Bulk actions are visible
+## Bulk actions
 
-Map steps, plans and recipes that use tools without `readOnlyHint: true` first return the full plan and a one-time confirm token. The host's approval prompt for the confirming call shows the token and plan. `dry_run` shows the plan without running anything.
+By default, maps and plans run directly, like single calls (most hosts already run with tool auto-approval). With `confirmWrites: true`, maps and plans that use tools without `readOnlyHint: true` first return the full plan and a one-time confirm token, and the host's approval prompt for the confirming call shows them. `dry_run` always shows the plan without running anything.
 
 ## HTTP mode
 

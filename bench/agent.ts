@@ -71,13 +71,15 @@ export async function runAgent(opts: {
   log?: (line: string) => void;
   /** Max characters per logged call/result; 0 = no limit. */
   clip?: number;
+  /** Pass the server's MCP instructions to the model (default true). Hosts differ: some drop them. */
+  useInstructions?: boolean;
 }): Promise<AgentRun> {
   const log = opts.log ?? (() => {});
   const lim = opts.clip ?? 600;
   const c = (t: string, max: number) => (lim === 0 ? t : clip(t, Math.min(max, lim)));
   const create: CreateMessage = opts.createMessage ?? ((p) => new Anthropic().messages.create(p));
   const tools = await opts.tools.tools();
-  const system = [opts.system, opts.tools.instructions()].filter(Boolean).join('\n\n') || undefined;
+  const system = [opts.system, opts.useInstructions === false ? undefined : opts.tools.instructions()].filter(Boolean).join('\n\n') || undefined;
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: opts.prompt }];
   log(`  system: ${system ?? '(none)'}`);
   log(`  tools: ${tools.map((t) => t.name).join(', ')}`);

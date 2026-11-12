@@ -9,8 +9,14 @@ import { mcpTools, runAgent } from './agent.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (fs.existsSync(path.join(root, '.env'))) process.loadEnvFile(path.join(root, '.env'));
 
-const PROMPT = process.argv[2] ??
+// DEMO_SKILL=<dir under bench/skills>: the prompt carries that skill's text, the way a harness loads a skill.
+// DEMO_NO_INSTRUCTIONS=1: the server's MCP instructions are not passed (some hosts drop them).
+const skillName = process.env.DEMO_SKILL;
+const skill = skillName ? fs.readFileSync(path.join(root, 'bench', 'skills', skillName, 'SKILL.md'), 'utf8') : undefined;
+const BASE = process.argv[2] ??
   'count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics';
+
+const PROMPT = skill ? `${BASE}\n\n<skill name="${skillName}">\n${skill}</skill>` : BASE;
 
 const tsx = path.join(root, 'node_modules', '.bin', 'tsx');
 const srv = (f: string) => ({ command: tsx, args: [path.join(root, 'bench', 'servers', f)], env: { DEMO_OUT: outDir } });
@@ -30,10 +36,11 @@ const log = (l: string) => { console.log(l); lines.push(l); };
 const model = process.env.BENCH_MODEL ?? 'claude-opus-5-5';
 log(`prompt: ${PROMPT}`);
 log(`model: ${model}`);
+log(`server instructions: ${process.env.DEMO_NO_INSTRUCTIONS === '1' ? 'off' : 'on'}`);
 
 const tools = await mcpTools({ command: tsx, args: [path.join(root, 'src', 'cli.ts'), '--config', cfg] });
 try {
-  const run = await runAgent({ prompt: PROMPT, tools, model, maxTurns: 25, log, clip: 0 });
+  const run = await runAgent({ prompt: PROMPT, tools, model, maxTurns: 25, log, clip: 0, useInstructions: process.env.DEMO_NO_INSTRUCTIONS !== '1' });
   log(`\n== done: ${run.turns} turns, ${run.toolCalls.length} tool calls, in=${run.inputTokens + run.cacheReadTokens + run.cacheWriteTokens} out=${run.outputTokens}${run.error ? `, error: ${run.error}` : ''}`);
   for (const f of ['sheets.json', 'chat.json']) {
     const p = path.join(outDir, f);

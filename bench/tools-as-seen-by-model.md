@@ -1,10 +1,10 @@
 # What the model sees from mcp-pipe
 
-Generated from `src/proxy.ts` OPS. Downstream tools appear next to these as `<server>__<tool>` with their own descriptions.
+Generated from `src/proxy.ts` OPS. Downstream tools appear next to these as `<server>__<tool>`, with their own descriptions plus the ref note shown at the end.
 
 ## Server instructions
 
-Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call  (its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a  stored value, so data can move between tools without being copied. To repeat a call with a change (after an  error, or to adjust it), use pipe__patch and send only the change instead of the whole call. pipe__get reads a  stored value or part of it; pipe__transform reshapes one with jq; pipe__map calls a tool once per item of a stored  list. For work with several steps: look at the inputs with single calls first, then write the remaining steps as  one plan and execute it with pipe__run (tool calls, jq steps, per-item calls and pauses for judgement) instead of  calling the tools one by one. Working plans can be saved as recipes (pipe__save) and run again by name. 
+Every tool result ends with "saved as {{ cN.out }}". Pass saved results to other tools as arguments  ("{{ c3.out }}", "{{ c3.out.rows }}", "{{ c3.out | <jq> }}") instead of copying data; compute derived values  (percentages, totals, formatting) in the query or with jq over the saved result. pipe__patch repeats a call with  only the changed arguments. pipe__run executes several steps as one pipe (tool calls, jq, per-item calls). 
 
 ## pipe__get
 
@@ -115,7 +115,7 @@ Reshape a stored value with a jq filter and store the output under a new handle,
 
 ## pipe__map
 
-Call one tool once per item of a stored list, in a single request. "over" is a handle of a list (e.g. "c3.out.rows", or "{{ c3.out | map(.id) }}"). In "args", "{{ item }}" is the current item and "{{ item.<path> }}" part of it. Returns how many calls succeeded, the failures, and a handle per call; the outputs are stored as a list under the map's own handle. Tools that can change data need a confirm: the first reply is the plan and a token, then repeat the call with "confirm". "dry_run" returns the plan only.
+Call one tool once per item of a stored list, in a single request. "over" is a handle of a list (e.g. "c3.out.rows", or "{{ c3.out | map(.id) }}"). In "args", "{{ item }}" is the current item and "{{ item.<path> }}" part of it. Returns how many calls succeeded, the failures, and a handle per call; the outputs are stored as a list under the map's own handle. "dry_run" returns the plan only.
 
 ```json
 {
@@ -142,7 +142,7 @@ Call one tool once per item of a stored list, in a single request. "over" is a h
     },
     "confirm": {
       "type": "string",
-      "description": "token from a needs_confirm reply"
+      "description": "only if a reply asked for it: the token from that needs_confirm reply"
     }
   },
   "required": [
@@ -155,7 +155,7 @@ Call one tool once per item of a stored list, in a single request. "over" is a h
 
 ## pipe__run
 
-Run a multi-step plan in one request: pass a new "chain", an existing "run" id, or a saved "recipe" name with "params". Use it as soon as you know the remaining steps — typically after a few single calls to look at the inputs — and especially when one step's result feeds the next: the steps run back to back without a round trip to you, intermediate results stay stored instead of passing through the conversation, and a failed step is fixed in place. A chain is {params?: {name: type}, steps: [...]}; each step has an "id" and one of: {call: "<tool>", args: {...}} calls a tool; {jq: "<program>"} computes a value, with params and earlier step outputs as jq variables ($id); {map: "<tool>", over: "<step id or handle of a list>", args: {...}} calls a tool once per item ("{{ item }}", "{{ item.path }}"); {ai: "<task>", input?: "<jq program>", by?: "session"|"subagent", batch?: n, expect?: <JSON Schema>} pauses the run for a step that needs judgement (done by you or a subagent), continued with pipe__resume. In args, "{{ name[.path] [| jq] }}" refers to a param, an earlier step's output, or any handle. The reply lists each step's output handle and the last step's result. A failing step stops the run; fix it with pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. Plans with tools that can change data need a confirm: the first reply is the plan and a token, then repeat the call with "confirm". "from" re-runs from a step; "dry_run" returns the plan; "force" repeats map items that already succeeded.
+Run a multi-step plan in one request: pass a new "chain" (JSON or YAML text, e.g. copied from a skill) with its "params", or an existing "run" id to run it again. Use it as soon as you know the remaining steps — typically after a few single calls to look at the inputs — and especially when one step's result feeds the next: the steps run back to back without a round trip to you, intermediate results stay stored instead of passing through the conversation, and a failed step is fixed in place. A chain is {params?: {name: type}, steps: [...]}; each step has an "id" and one of: {call: "<tool>", args: {...}} calls a tool; {jq: "<program>"} computes a value, with params and earlier step outputs as jq variables ($id); {map: "<tool>", over: "<step id or handle of a list>", args: {...}} calls a tool once per item ("{{ item }}", "{{ item.path }}"); {ai: "<task>", input?: "<jq program>", by?: "session"|"subagent", batch?: n, expect?: <JSON Schema>} pauses the run for a step that needs judgement (done by you or a subagent), continued with pipe__resume. In args, "{{ name[.path] [| jq] }}" refers to a param, an earlier step's output, or any handle. The reply lists each step's output handle and the last step's result. A failing step stops the run; fix it with pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. "from" re-runs from a step; "dry_run" returns the plan; "force" repeats map items that already succeeded.
 
 ```json
 {
@@ -172,47 +172,22 @@ Run a multi-step plan in one request: pass a new "chain", an existing "run" id, 
       "type": "string",
       "description": "existing run id, e.g. \"r1\""
     },
-    "recipe": {
-      "type": "string",
-      "description": "saved recipe name"
-    },
     "from": {
       "type": "string",
       "description": "step id to run again from"
     },
     "dry_run": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "validate and return the plan without running it"
     },
     "confirm": {
       "type": "string",
-      "description": "token from a needs_confirm reply"
+      "description": "only if a reply asked for it: the token from that needs_confirm reply"
     },
     "force": {
       "type": "boolean"
     }
   }
-}
-```
-
-## pipe__define
-
-Validate a chain and store it as a run without executing it. Returns the run id and its plan. A chain is {params?: {name: type}, steps: [...]}; each step has an "id" and one of: {call: "<tool>", args: {...}} calls a tool; {jq: "<program>"} computes a value, with params and earlier step outputs as jq variables ($id); {map: "<tool>", over: "<step id or handle of a list>", args: {...}} calls a tool once per item ("{{ item }}", "{{ item.path }}"); {ai: "<task>", input?: "<jq program>", by?: "session"|"subagent", batch?: n, expect?: <JSON Schema>} pauses the run for a step that needs judgement (done by you or a subagent), continued with pipe__resume. In args, "{{ name[.path] [| jq] }}" refers to a param, an earlier step's output, or any handle.
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "chain": {
-      "description": "chain object (or YAML/JSON text)"
-    },
-    "params": {
-      "type": "object",
-      "description": "values for the chain's params"
-    }
-  },
-  "required": [
-    "chain"
-  ]
 }
 ```
 
@@ -246,43 +221,6 @@ Give the result of a paused ai step and continue its run. "output" is checked ag
 }
 ```
 
-## pipe__save
+## Note appended to every downstream tool description
 
-Save the chain of a run as a reusable recipe. Run it later with pipe__run {recipe, params}.
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "run": {
-      "type": "string"
-    },
-    "name": {
-      "type": "string",
-      "description": "letters, digits, \"-\" or \"_\""
-    },
-    "description": {
-      "type": "string"
-    },
-    "overwrite": {
-      "type": "boolean"
-    }
-  },
-  "required": [
-    "run",
-    "name"
-  ]
-}
-```
-
-## pipe__recipes
-
-List saved recipes with their descriptions and params.
-
-```json
-{
-  "type": "object",
-  "properties": {}
-}
-```
-
+Every result ends with "saved as {{ cN.out }}". Any argument can take a saved result instead of a literal:  "{{ c3.out }}", a part "{{ c3.out.rows[0].id }}", or any jq expression over saved results  "{{ [["name","total"]] + (c3.out | map([.name, .total])) }}".  The value is filled in before the call, so data from one tool goes to the next without being copied. 

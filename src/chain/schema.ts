@@ -1,4 +1,4 @@
-// Chains (and saved recipes): an ordered list of steps. YAML or JSON is only the container;
+// Chains (pipes): an ordered list of steps. YAML or JSON is only the container;
 // data work inside steps is jq, and arguments use {{ name[.path] [| jq] }} refs.
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
@@ -29,14 +29,14 @@ export type Step = CallStep | JqStep | MapStep | AiStep;
 export type StepKind = 'call' | 'jq' | 'map' | 'ai';
 
 const chainSchema = z.object({
-  recipe: z.string().optional(),
+  name: z.string().optional(),
   description: z.string().optional(),
   params: z.record(z.string().regex(ID), z.enum(PARAM_TYPES)).optional(),
   steps: z.array(z.record(z.string(), z.unknown())).min(1),
 }).strict();
 
 export type Chain = {
-  recipe?: string;
+  name?: string;
   description?: string;
   params?: Record<string, ParamType>;
   steps: Step[];
@@ -131,7 +131,7 @@ export function parseChain(src: string | object): Chain {
   });
 
   return {
-    ...(top.data.recipe ? { recipe: top.data.recipe } : {}),
+    ...(top.data.name ? { name: top.data.name } : {}),
     ...(top.data.description ? { description: top.data.description } : {}),
     ...(top.data.params ? { params: top.data.params } : {}),
     steps,

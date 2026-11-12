@@ -17,12 +17,12 @@ describe('proxy', () => {
     const r = await h.call('echo__echo', { text: 'hi' });
     const t = texts(r);
     expect(t[0]).toBe('hi');
-    expect(t[1]).toMatch(/^⟨pipe:c\d+⟩$/);
+    expect(t[1]).toMatch(/^saved as \{\{ c\d+\.out \}\}$/);
     expect(r.content).toHaveLength(2);
   });
   it('call is recorded with args and result', async () => {
     const r = await h.call('echo__echo', { text: 'rec' });
-    const id = texts(r).at(-1)!.slice(6, -1);
+    const id = texts(r).at(-1)!.match(/\{\{ (c\d+)\.out/)![1]!;
     const rec = h.store.getCall(id)!;
     expect(rec.args).toEqual({ text: 'rec' });
     expect(rec.server).toBe('echo');
@@ -32,7 +32,7 @@ describe('proxy', () => {
   it('isError passes through and is recorded', async () => {
     const r = await h.call('echo__fail');
     expect(r.isError).toBe(true);
-    const id = texts(r).at(-1)!.slice(6, -1);
+    const id = texts(r).at(-1)!.match(/\{\{ (c\d+)\.out/)![1]!;
     expect(h.store.getCall(id)!.isError).toBe(true);
   });
   it('image content passes through byte-identical', async () => {

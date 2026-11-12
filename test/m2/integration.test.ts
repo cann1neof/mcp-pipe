@@ -32,6 +32,15 @@ describe('refs in direct calls', () => {
     const r = await h.call('echo__sum', { values: '{"a": 1}' });
     expect(r.isError).toBe(true);
   });
+  it('a ref can be any jq expression that mentions handles', async () => {
+    const rows = handleOf(await h.call('echo__rows', { n: 3 }));
+    const r = await h.call('echo__sum', { values: `{{ [100] + (${rows}.out | map(.id)) }}` });
+    expect(texts(r)[0]).toBe('106');
+    const s2 = await h.call('echo__sum', { values: `{{ ${rows}.out | map(.id) | . + [1] }}` });
+    expect(texts(s2)[0]).toBe('7');
+    const lit = await h.call('echo__echo', { text: '{{ "c1.out" }}' });
+    expect(texts(lit)[0]).toMatch(/bad reference/);
+  });
   it('embedded ref inside text', async () => {
     const j = handleOf(await h.call('echo__json', { value: { hash: 'deadbeef' } }));
     const r = await h.call('echo__echo', { text: `prefix {{ ${j}.out.hash | .[0:4] }}%` });
@@ -83,7 +92,7 @@ describe('pipe__get / pipe__transform', () => {
 
 describe('pipe__map + confirm', () => {
   let h: Awaited<ReturnType<typeof startHarness>>;
-  beforeAll(async () => { h = await startHarness(); });
+  beforeAll(async () => { h = await startHarness(undefined, { confirmWrites: true }); });
   afterAll(async () => { await h.close(); });
 
   it('read-only tool runs at once; outputs stored in order', async () => {
@@ -160,7 +169,7 @@ describe('blind mode', () => {
       hr: { ...fixtureServer('echo-server'), pipe: { visibility: 'hidden', shape: 'types', allowSinks: ['sink'], tools: { rows: { visibility: 'visible' } } } },
       sink: fixtureServer('echo-server'),
       other: fixtureServer('echo-server'),
-    });
+    }, { confirmWrites: true });
   });
   afterAll(async () => { await h.close(); });
   const all = (r: any) => JSON.stringify(r);
@@ -169,7 +178,7 @@ describe('blind mode', () => {
     const r = await h.call('hr__lookup', { key: 'ann' });
     expect(all(r)).not.toContain(SECRET);
     expect(all(r)).not.toContain('123456');
-    expect(texts(r)[0]).toMatch(/⟨pipe:c\d+⟩ hidden · \{key:string,secret:string,salary:number\}/);
+    expect(texts(r)[0]).toMatch(/saved as \{\{ c\d+\.out \}\} hidden · \{key:string,secret:string,salary:number\}/);
   });
   it('per-tool override is visible', async () => {
     expect(texts(await h.call('hr__rows', { n: 1 }))[0]).toBe('[{"id":1,"name":"row-1"}]');
@@ -232,7 +241,7 @@ describe('blind mode shape none', () => {
     const h = await startHarness({ hr: { ...fixtureServer('echo-server'), pipe: { visibility: 'hidden', shape: 'none' } } });
     try {
       const r = await h.call('hr__rows', { n: 5 });
-      expect(texts(r)[0]).toMatch(/^⟨pipe:c\d+⟩ hidden$/);
+      expect(texts(r)[0]).toMatch(/^saved as \{\{ c\d+\.out \}\} hidden$/);
     } finally { await h.close(); }
   });
 });

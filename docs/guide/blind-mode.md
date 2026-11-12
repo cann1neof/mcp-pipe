@@ -25,7 +25,7 @@ Mark a server (or one tool) hidden, and its data can be processed by plans and s
 
 ## What happens
 
-- A hidden tool's result comes back as `⟨pipe:c3⟩ hidden · {name:string,salary:number}` (per `shape`).
+- A hidden tool's result comes back as `saved as {{ c3.out }} hidden · {name:string,salary:number}` (per `shape`).
 - **Taint spreads**: anything derived from a hidden value is hidden too — jq transforms, refs in arguments, map items and outputs, and results of calls whose arguments used hidden data.
 - `pipe__get` on a hidden value is refused.
 - A call that would send hidden data to a server not in `allowSinks` is refused before anything is sent.

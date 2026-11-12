@@ -32,7 +32,7 @@ export default defineConfig({
           { text: 'Peek', link: '/guide/peek' },
           { text: 'Plans (chains)', link: '/guide/chains' },
           { text: 'AI steps', link: '/guide/ai-steps' },
-          { text: 'Recipes', link: '/guide/recipes' },
+          { text: 'Pipes in skills', link: '/guide/skills' },
           { text: 'Blind mode', link: '/guide/blind-mode' },
           { text: 'Configuration', link: '/guide/config' },
         ],

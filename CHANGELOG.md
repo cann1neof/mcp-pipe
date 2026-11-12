@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Results end with `saved as {{ cN.out }}` (was `⟨pipe:cN⟩`): the label is the ref that passes the result on.
+- A ref can be any jq expression over saved results: `{{ [["a","b"]] + (c3.out | map([.a, .b])) }}`.
+- Array/object arguments sent as JSON text are parsed before forwarding.
+- Confirm tokens are off by default; `confirmWrites: true` turns them on.
+- Removed `pipe__save`, `pipe__recipes`, `pipe__define` and `recipesDir`: keep pipes in skills and pass them to `pipe__run` as text (`dry_run` replaces define). Example recipes are now `examples/skills/`.
+
 ## 1.0.0 — unreleased
 
 First public release.

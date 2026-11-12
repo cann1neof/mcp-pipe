@@ -11,9 +11,11 @@
   },
   "store":  { "path": "~/.mcp-pipe/store.db", "ttlDays": 7, "memoryOnly": false },
   "peek":   { "maxBytes": 8192 },
-  "recipesDir": "~/.mcp-pipe/recipes"
+  "confirmWrites": false
 }
 ```
+
+`confirmWrites` (default `false`): when `true`, plans and maps that call write tools return the plan and a one-time confirm token before running.
 
 ## Servers
 
