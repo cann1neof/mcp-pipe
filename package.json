@@ -9,6 +9,8 @@
   },
   "files": [
     "dist",
+    "recipes",
+    "templates",
     "LICENSE",
     "README.md"
   ],

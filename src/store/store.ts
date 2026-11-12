@@ -23,6 +23,8 @@ export type RunRecord = {
   params: Record<string, unknown>;
   steps: Record<string, StepState>;
   status: RunStatus;
+  /** The user confirmed this run's write steps; cleared when the chain is patched. */
+  approved?: boolean;
   createdAt: number;
 };
 
