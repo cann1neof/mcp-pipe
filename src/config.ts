@@ -103,7 +103,18 @@ export function parseConfig(raw: unknown, source = 'config', secrets: SecretSour
     const expanded = expandSecrets(conn, secrets, `${source}: server "${name}"`) as Record<string, unknown>;
     servers[name] = { ...expanded, ...(pipe ? { pipe } : {}) } as PipeConfig['mcpServers'][string];
   }
-  return { ...top.data, mcpServers: servers };
+  const { store, recipesDir, ...rest } = top.data;
+  return {
+    ...rest,
+    mcpServers: servers,
+    ...(store ? { store: { ...store, ...(store.path ? { path: expandHome(store.path) } : {}) } } : {}),
+    ...(recipesDir ? { recipesDir: expandHome(recipesDir) } : {}),
+  };
+}
+
+/** `~/x` → `<home>/x`. */
+export function expandHome(p: string): string {
+  return p === '~' ? os.homedir() : p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
 }
 
 export function loadConfig(p: string, secrets: SecretSources = {}): PipeConfig {
