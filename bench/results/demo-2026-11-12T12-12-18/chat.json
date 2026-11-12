@@ -1,0 +1,7 @@
+[
+  {
+    "channel": "analytics",
+    "text": "*Retention – Q3 2026 signup cohorts* (354 users who signed up Jul–Sep 2026)\n\n• Day 1: *33.1%*\n• Week 1 (days 1–7): *97.7%*\n• Week 2 (days 8–14): *61.9%*\n• Week 4 (days 22–28): *49.7%*\n\nBy month, Week 4 retention was Jul 52.9%, Aug 44.9% and Sep 51.3%. August had the weakest cohort. Early retention held steady across all three months.\nA user counts as retained if they had any event in the window. Source: `users_data`.\nFull breakdown: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T12:12:52.016Z"
+  }
+]

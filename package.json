@@ -37,7 +37,8 @@
     "bench": "tsx bench/run.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "demo": "tsx bench/demo.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
