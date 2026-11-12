@@ -26,6 +26,8 @@ export type AgentRun = {
   finalText: string;
   stopReason: string | null;
   error?: string;
+  /** The exact request context: system prompt, tool list and the full message array. */
+  conversation?: { system?: string; tools: Anthropic.Tool[]; messages: Anthropic.MessageParam[] };
 };
 
 export async function mcpTools(server: { command: string; args?: string[]; env?: Record<string, string> }): Promise<ToolProvider> {
@@ -82,6 +84,7 @@ export async function runAgent(opts: {
   const run: AgentRun = {
     model: opts.model, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0,
     turns: 0, toolCalls: [], finalText: '', stopReason: null,
+    conversation: { ...(system ? { system } : {}), tools, messages },
   };
 
   for (let turn = 0; turn < (opts.maxTurns ?? 12); turn++) {

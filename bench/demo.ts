@@ -39,7 +39,9 @@ try {
     const p = path.join(outDir, f);
     log(`\n== ${f}\n${fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '(nothing written)'}`);
   }
-  fs.writeFileSync(path.join(outDir, 'run.json'), JSON.stringify({ prompt: PROMPT, ...run }, null, 2));
+  const { conversation, ...rest } = run;
+  fs.writeFileSync(path.join(outDir, 'run.json'), JSON.stringify({ prompt: PROMPT, ...rest }, null, 2));
+  fs.writeFileSync(path.join(outDir, 'conversation.json'), JSON.stringify({ model, ...conversation }, null, 2));
 } finally {
   await tools.close();
   fs.writeFileSync(path.join(outDir, 'transcript.txt'), lines.join('\n') + '\n');
