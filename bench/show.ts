@@ -15,7 +15,11 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipe-show-'));
 const cfg = path.join(dir, 'servers.json');
 fs.writeFileSync(cfg, JSON.stringify({ mcpServers: { db: demoDb }, store: { memoryOnly: true } }));
 
-for (const [mode, server] of [['direct', demoDb], ['pipe', { command: tsx, args: [cli, '--config', cfg] }]] as const) {
+const modes: [string, { command: string; args: string[] }][] = [
+  ['direct', demoDb],
+  ['pipe', { command: tsx, args: [cli, '--config', cfg] }],
+];
+for (const [mode, server] of modes) {
   const p = await mcpTools(server);
   const system = [sqlFix.SYSTEM, p.instructions()].filter(Boolean).join('\n\n');
   console.log(`\n===== ${mode} =====\n--- system ---\n${system}\n--- tools ---`);
