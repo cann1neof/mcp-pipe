@@ -73,6 +73,8 @@ export async function runAgent(opts: {
   const tools = await opts.tools.tools();
   const system = [opts.system, opts.tools.instructions()].filter(Boolean).join('\n\n') || undefined;
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: opts.prompt }];
+  log(`  system: ${system ?? '(none)'}`);
+  log(`  tools: ${tools.map((t) => t.name).join(', ')}`);
   const run: AgentRun = {
     model: opts.model, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0,
     turns: 0, toolCalls: [], finalText: '', stopReason: null,

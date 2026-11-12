@@ -56,6 +56,7 @@ Store: `~/.mcp-pipe/store.db` (mode 600, entries older than 7 days are deleted o
 ```bash
 cp .env.example .env        # put ANTHROPIC_API_KEY=... in it
 npm run bench -- sql-fix --runs 10            # add --verbose to see each turn
+npx tsx bench/show.ts                        # exact system prompt + tools per mode
 ```
 
 Runs the same task (a 56-line report query with one wrong column) with the demo DB direct vs behind mcp-pipe.
