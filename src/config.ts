@@ -29,6 +29,22 @@ const configSchema = z.object({
 export const defaultDir = () => path.join(os.homedir(), '.mcp-pipe');
 export const defaultConfigPath = () => path.join(defaultDir(), 'servers.json');
 
+/** Replaces `${env:VAR}` in every string of `v`. Missing variables are an error naming the variable. */
+export function expandEnv(v: unknown, env: NodeJS.ProcessEnv = process.env, where = ''): unknown {
+  if (typeof v === 'string') {
+    return v.replace(/\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_m, name: string) => {
+      const val = env[name];
+      if (val === undefined) throw new Error(`${where || 'config'}: environment variable ${name} is not set`);
+      return val;
+    });
+  }
+  if (Array.isArray(v)) return v.map((x) => expandEnv(x, env, where));
+  if (v !== null && typeof v === 'object') {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, expandEnv(x, env, where)]));
+  }
+  return v;
+}
+
 export function parseConfig(raw: unknown, source = 'config'): PipeConfig {
   const top = configSchema.safeParse(raw);
   if (!top.success) {
@@ -47,7 +63,7 @@ export function parseConfig(raw: unknown, source = 'config'): PipeConfig {
       const issue = r.error.issues[0]!;
       throw new Error(`${source}: server "${name}" invalid "${issue.path.join('.')}": ${issue.message}`);
     }
-    servers[name] = r.data as PipeConfig['mcpServers'][string];
+    servers[name] = expandEnv(r.data, process.env, `${source}: server "${name}"`) as PipeConfig['mcpServers'][string];
   }
   return { ...top.data, mcpServers: servers };
 }
