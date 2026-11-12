@@ -73,6 +73,7 @@ async function main() {
     };
     summary[mode] = s;
     const out = path.join(root, 'bench', 'results', `${taskName}-${mode}.json`);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, JSON.stringify({ task: taskName, mode, date: new Date().toISOString(), summary: s, results }, null, 2));
     console.log(`→ ${path.relative(root, out)}`);
   }
