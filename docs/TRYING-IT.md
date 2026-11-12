@@ -50,3 +50,14 @@ Undo: copy the `.bak-…` file back over the host config.
 - Ask for `pipe__get` with `c1.out[0]` → part of an earlier result, without re-running.
 
 Store: `~/.mcp-pipe/store.db` (mode 600, entries older than 7 days are deleted on start).
+
+## 4. Token benchmark (needs an API key)
+
+```bash
+cp .env.example .env        # put ANTHROPIC_API_KEY=... in it
+npm run bench -- sql-fix --runs 10
+```
+
+Runs the same task (a 56-line report query with one wrong column) with the demo DB direct vs behind mcp-pipe.
+Writes `bench/results/sql-fix-{direct,pipe}.json` and prints output/total token deltas and how often `pipe__patch` was used.
+Model: `BENCH_MODEL` (default `claude-opus-5-5`). ~20 short agent runs; each is a few thousand tokens.
