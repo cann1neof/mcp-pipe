@@ -11,9 +11,9 @@ import { patchOp } from './ops/patch.js';
 export const marker = (id: string) => `⟨pipe:${id}⟩`;
 
 const INSTRUCTIONS =
-  'mcp-pipe proxies your MCP tools and stores every call under a handle, shown as ⟨pipe:cN⟩ at the end of each result. ' +
-  'To fix a call with a small mistake, use pipe__patch with find/replace edits instead of re-typing the arguments. ' +
-  'To fetch a stored value (or part of it) use pipe__get with a handle like "c3.out.rows[0]".';
+  'Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call ' +
+  '(its arguments and its result). pipe__patch re-runs a stored call with modified arguments; ' +
+  'pipe__get reads a stored call\'s arguments or result, or part of them.';
 
 export const OPS: Op[] = [getOp, patchOp];
 

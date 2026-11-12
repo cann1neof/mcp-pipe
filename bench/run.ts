@@ -1,16 +1,16 @@
-// Usage: npm run bench -- sql-fix [--runs 10] [--mode direct|pipe|both] [--verbose]
+// Usage: npm run bench -- retention [--runs 10] [--mode direct|pipe|both] [--verbose]
 // Credentials: ANTHROPIC_API_KEY (read from .env if present). Model: BENCH_MODEL (default claude-opus-5-5).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mcpTools, runAgent, type AgentRun } from './agent.js';
-import * as sqlFix from './tasks/sql-fix.js';
+import * as retention from './tasks/retention.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (fs.existsSync(path.join(root, '.env'))) process.loadEnvFile(path.join(root, '.env'));
 
-const TASKS = { 'sql-fix': sqlFix } as const;
+const TASKS = { retention } as const;
 type Mode = 'direct' | 'pipe';
 
 function arg(name: string, dflt: string): string {
@@ -20,21 +20,30 @@ function arg(name: string, dflt: string): string {
 
 const tsx = path.join(root, 'node_modules', '.bin', 'tsx');
 const cli = path.join(root, 'src', 'cli.ts');
-const demoDb = { command: tsx, args: [cli, 'demo-db'] };
-
-function serverFor(mode: Mode) {
-  if (mode === 'direct') return demoDb;
+function serverFor(mode: Mode, task: (typeof TASKS)[keyof typeof TASKS]) {
+  const db = { command: tsx, args: [path.join(root, 'bench', 'servers', task.SERVER)] };
+  if (mode === 'direct') return db;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipe-bench-'));
   const cfg = path.join(dir, 'servers.json');
-  fs.writeFileSync(cfg, JSON.stringify({ mcpServers: { db: demoDb }, store: { memoryOnly: true } }));
+  fs.writeFileSync(cfg, JSON.stringify({ mcpServers: { db }, store: { memoryOnly: true } }));
   return { command: tsx, args: [cli, '--config', cfg] };
 }
+
+// $ per 1M tokens [input, output]; cache reads 0.1x input, cache writes 1.25x input.
+const PRICES: Record<string, [number, number]> = {
+  'claude-opus-5-5': [4, 20], 'claude-sonnet-5-5': [2, 10], 'claude-haiku-5-5': [0.1, 0.5], 'claude-fable-5-2': [8, 40],
+};
+const cost = (r: AgentRun) => {
+  const p = PRICES[r.model];
+  if (!p) return NaN;
+  return (r.inputTokens * p[0] + r.cacheReadTokens * p[0] * 0.1 + r.cacheWriteTokens * p[0] * 1.25 + r.outputTokens * p[1]) / 1e6;
+};
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs: number[]) => (xs.length ? sum(xs) / xs.length : 0);
 
 async function main() {
-  const taskName = (process.argv[2] ?? 'sql-fix') as keyof typeof TASKS;
+  const taskName = (process.argv[2] ?? 'retention') as keyof typeof TASKS;
   const task = TASKS[taskName];
   if (!task) throw new Error(`unknown task ${taskName}; tasks: ${Object.keys(TASKS).join(', ')}`);
   const runs = Number(arg('--runs', '10'));
@@ -49,7 +58,7 @@ async function main() {
     const results: (AgentRun & { success: boolean })[] = [];
     for (let i = 0; i < runs; i++) {
       if (verbose) console.log(`\n${taskName} ${mode} #${i + 1}`);
-      const tools = await mcpTools(serverFor(mode));
+      const tools = await mcpTools(serverFor(mode, task));
       try {
         const r = await runAgent({
           prompt: task.PROMPT, system: task.SYSTEM, tools, model, effort,
@@ -61,7 +70,7 @@ async function main() {
       }
       const last = results.at(-1)!;
       console.log(`${taskName} ${mode} #${i + 1}: out=${last.outputTokens} in=${last.inputTokens + last.cacheReadTokens + last.cacheWriteTokens} ` +
-        `turns=${last.turns} tools=[${last.toolCalls.map((c) => c.name).join(', ')}] ${last.success ? 'OK' : 'FAIL'}`);
+        `turns=${last.turns} tools=[${last.toolCalls.map((c) => c.name).join(', ')}] bug=${task.hitPlantedBug(last) ? 'hit' : 'missed'} ${last.success ? 'OK' : 'FAIL'}`);
     }
     const s = {
       model, effort: effort ?? 'default', runs,
@@ -69,6 +78,9 @@ async function main() {
       avgOutputTokens: mean(results.map((r) => r.outputTokens)),
       avgInputTokens: mean(results.map((r) => r.inputTokens + r.cacheReadTokens + r.cacheWriteTokens)),
       avgTurns: mean(results.map((r) => r.turns)),
+      avgCostUSD: mean(results.map(cost)),
+      hitPlantedBug: results.filter((r) => task.hitPlantedBug(r)).length,
+      describeUsed: results.filter((r) => r.toolCalls.some((c) => /get_table_description/.test(c.name))).length,
       patchUsed: results.filter((r) => r.toolCalls.some((c) => c.name === 'pipe__patch')).length,
     };
     summary[mode] = s;
@@ -78,12 +90,15 @@ async function main() {
     console.log(`→ ${path.relative(root, out)}`);
   }
 
-  const d = summary.direct as { avgOutputTokens: number; avgInputTokens: number } | undefined;
-  const p = summary.pipe as { avgOutputTokens: number; avgInputTokens: number; patchUsed: number } | undefined;
+  type S = { avgOutputTokens: number; avgInputTokens: number; avgCostUSD: number; patchUsed: number; hitPlantedBug: number; successRate: number };
+  const d = summary.direct as S | undefined;
+  const p = summary.pipe as S | undefined;
   if (d && p) {
     const pct = (a: number, b: number) => (b ? `${(((a - b) / b) * 100).toFixed(1)}%` : 'n/a');
     console.log(`\noutput tokens: pipe ${p.avgOutputTokens.toFixed(0)} vs direct ${d.avgOutputTokens.toFixed(0)} (${pct(p.avgOutputTokens, d.avgOutputTokens)})`);
     console.log(`total tokens:  pipe ${(p.avgOutputTokens + p.avgInputTokens).toFixed(0)} vs direct ${(d.avgOutputTokens + d.avgInputTokens).toFixed(0)} (${pct(p.avgOutputTokens + p.avgInputTokens, d.avgOutputTokens + d.avgInputTokens)})`);
+    console.log(`cost:          pipe $${p.avgCostUSD.toFixed(4)} vs direct $${d.avgCostUSD.toFixed(4)} (${pct(p.avgCostUSD, d.avgCostUSD)})`);
+    console.log(`hit planted bug: direct ${d.hitPlantedBug}/${runs}, pipe ${p.hitPlantedBug}/${runs} · success: direct ${d.successRate * runs}/${runs}, pipe ${p.successRate * runs}/${runs}`);
     console.log(`patch used: ${p.patchUsed}/${runs}`);
   }
 }

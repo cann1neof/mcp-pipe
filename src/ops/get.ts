@@ -6,12 +6,12 @@ export const getOp: Op = {
   def: {
     name: 'pipe__get',
     description:
-      'Fetch a stored value by handle instead of asking for it again. Every tool call made through mcp-pipe ' +
-      'gets a handle shown as ⟨pipe:cN⟩. Handles: "c3.out" (result), "c3.in" (arguments), with an optional path ' +
-      'like "c3.out.rows[0].name" or "c3.in.sql". Special handle "status" lists connected servers and startup errors.',
+      'Read the arguments or the result of an earlier tool call by its handle. ' +
+      'Handle forms: "c3.out" (result), "c3.in" (arguments); add a path to read part of a value, ' +
+      'e.g. "c3.out.items[0].id". "status" returns the connected servers and any startup errors.',
     inputSchema: {
       type: 'object',
-      properties: { handle: { type: 'string', description: 'e.g. "c3.out.rows[0]" or "status"' } },
+      properties: { handle: { type: 'string', description: 'call handle with optional path, or "status"' } },
       required: ['handle'],
     },
     annotations: { readOnlyHint: true },

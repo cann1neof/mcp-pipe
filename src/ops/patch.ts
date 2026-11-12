@@ -51,15 +51,14 @@ export const patchOp: Op = {
   def: {
     name: 'pipe__patch',
     description:
-      'Fix a previous tool call without rewriting it: copy its arguments, apply small edits, and run it again. ' +
-      'Use this instead of re-sending a long query/document with one mistake. ' +
-      'Edits: {find, replace} replaces every occurrence of the text in all string arguments ' +
-      '(or only under "path", e.g. "sql"); {path, set} sets one argument to a new value. ' +
-      'With no edits it simply reruns the call. Returns the new call\'s result with its own handle; the original is kept.',
+      'Re-run an earlier tool call with modified arguments. The call\'s stored arguments are copied, ' +
+      'the edits are applied to the copy, and the result is executed as a new call with its own handle. ' +
+      'Edit forms: {find, replace} replaces text in string arguments (all of them, or only under "path"); ' +
+      '{path, set} sets the value at "path". With no edits the call is re-run unchanged.',
     inputSchema: {
       type: 'object',
       properties: {
-        call: { type: 'string', description: 'handle of the call to fix, e.g. "c3"' },
+        call: { type: 'string', description: 'handle of the call, e.g. "c3"' },
         edits: {
           type: 'array',
           items: {
@@ -67,12 +66,12 @@ export const patchOp: Op = {
             properties: {
               find: { type: 'string' },
               replace: { type: 'string' },
-              path: { type: 'string', description: 'argument path, e.g. "sql" or "rows[0].name"' },
+              path: { type: 'string', description: 'path inside the arguments, e.g. "a.b[0]"' },
               set: { description: 'new value for "path"' },
             },
           },
         },
-        run: { type: 'boolean', description: 'run the patched call (default true)' },
+        run: { type: 'boolean', description: 'execute the new call (default true); false only stores it' },
       },
       required: ['call'],
     },

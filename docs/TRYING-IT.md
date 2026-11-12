@@ -55,10 +55,14 @@ Store: `~/.mcp-pipe/store.db` (mode 600, entries older than 7 days are deleted o
 
 ```bash
 cp .env.example .env        # put ANTHROPIC_API_KEY=... in it
-npm run bench -- sql-fix --runs 10            # add --verbose to see each turn
-npx tsx bench/show.ts                        # exact system prompt + tools per mode
+npm run bench -- retention --runs 10           # add --verbose to see each turn
+npx tsx bench/show.ts                          # exact system prompt + tools per mode
 ```
 
-Runs the same task (a 56-line report query with one wrong column) with the demo DB direct vs behind mcp-pipe.
-Writes `bench/results/sql-fix-{direct,pipe}.json` and prints output/total token deltas and how often `pipe__patch` was used.
-Model: `BENCH_MODEL` (default `claude-opus-5-5`). ~20 short agent runs; each is a few thousand tokens.
+Task `retention`: the model gets only the prompt
+`count the retention rates in the last quarter using table \`users_data\`` and no system prompt.
+The database server (`bench/servers/warehouse.ts`) exposes two generic tools, `run_query` and `get_table_description`.
+Its metadata catalog is stale: it documents the user column as `usr_id`, but the table has `user_id`.
+Modes: `direct` (warehouse server alone) vs `pipe` (same server behind mcp-pipe, which adds its server instructions and `pipe__get` / `pipe__patch`).
+Prints token and cost deltas, how often the planted bug was hit, success, and `pipe__patch` usage; writes `bench/results/retention-{direct,pipe}.json`.
+Model: `BENCH_MODEL` (default `claude-opus-5-5`).
