@@ -153,3 +153,12 @@ describe('secrets', () => {
     expect(() => expandSecrets('${keychain:a/b}', { keychain: () => { throw new Error('keychain item not found'); } })).toThrow(/not found/);
   });
 });
+
+describe('config paths', () => {
+  it('expands ~ in store.path and recipesDir', async () => {
+    const os = await import('node:os');
+    const c = parseConfig({ mcpServers: {}, store: { path: '~/x/store.db' }, recipesDir: '~/r' });
+    expect(c.store!.path).toBe(`${os.homedir()}/x/store.db`);
+    expect(c.recipesDir).toBe(`${os.homedir()}/r`);
+  });
+});
