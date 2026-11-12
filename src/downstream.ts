@@ -1,5 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { toolName } from './naming.js';
 import type { PipeConfig, ServerConfig } from './types.js';
@@ -17,14 +19,20 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 }
 
 async function connect(name: string, cfg: ServerConfig): Promise<{ client: Client; tools: Tool[] }> {
-  if ('url' in cfg) throw new Error('http downstream servers come in M2; use a stdio server for now');
-  const transport = new StdioClientTransport({
-    command: cfg.command,
-    args: cfg.args ?? [],
-    env: { ...getDefaultEnvironment(), ...(cfg.env ?? {}) },
-    cwd: cfg.cwd,
-    stderr: 'inherit',
-  });
+  let transport: Transport;
+  if ('url' in cfg) {
+    transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
+      requestInit: { headers: cfg.headers ?? {} },
+    });
+  } else {
+    transport = new StdioClientTransport({
+      command: cfg.command,
+      args: cfg.args ?? [],
+      env: { ...getDefaultEnvironment(), ...(cfg.env ?? {}) },
+      cwd: cfg.cwd,
+      stderr: 'inherit',
+    });
+  }
   const client = new Client({ name: `mcp-pipe→${name}`, version: VERSION });
   try {
     await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, 'connect');

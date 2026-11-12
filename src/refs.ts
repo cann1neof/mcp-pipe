@@ -1,7 +1,13 @@
 import { shapeOf } from './values.js';
+import { transform } from './jq.js';
 
 export type PathSeg = string | number;
 export type Handle = { call: string; side: 'in' | 'out'; path: PathSeg[] };
+
+/** What a ref name resolves to. `hiddenFrom` lists the servers whose hidden data the value carries. */
+export type RefTarget = { value: unknown; hiddenFrom?: string[] };
+/** Resolves a ref root name: a handle ("c3.out", "c3.in"), or in chains a param / step id / "item". */
+export type Resolver = (name: string) => RefTarget;
 
 /** Parses a path like `.rows[0].name`, `rows[0]["a b"]` or `sql`. */
 export function parsePath(s: string): PathSeg[] {
@@ -35,9 +41,51 @@ export function parseHandle(raw: string): Handle {
   const braces = /^\{\{\s*([\s\S]*?)\s*\}\}$/.exec(s);
   if (braces) s = braces[1]!;
   if (s.startsWith('$')) s = s.slice(1);
-  const m = /^(c\d+)(?:\.(in|out)\b)?(.*)$/.exec(s);
+  const m = /^(c\d+)(?![\w-])(?:\.(in|out)(?![\w-]))?(.*)$/.exec(s);
   if (!m) throw new Error(`bad handle "${raw}": expected like c3.out or c3.in.sql`);
   return { call: m[1]!, side: (m[2] as 'in' | 'out' | undefined) ?? 'out', path: parsePath(m[3] ?? '') };
+}
+
+export type RefExpr = { name: string; path: PathSeg[]; jq?: string };
+
+/** Splits `name.path | jq` at the first top-level `|` (outside quotes and brackets). */
+function splitJq(s: string): [string, string | undefined] {
+  let quote: string | null = null;
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (quote) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '[' || ch === '(') depth++;
+    else if (ch === ']' || ch === ')') depth--;
+    else if (ch === '|' && depth === 0) return [s.slice(0, i), s.slice(i + 1)];
+  }
+  return [s, undefined];
+}
+
+/** Parses the inside of `{{ … }}`: a root name, an optional path, an optional `| jq` filter. */
+export function parseRefExpr(inner: string): RefExpr {
+  const [refPart, jqPart] = splitJq(inner.trim());
+  let s = refPart.trim();
+  if (s.startsWith('$')) s = s.slice(1);
+  let name: string;
+  let rest: string;
+  const h = /^(c\d+)(?![\w-])(?:\.(in|out)(?![\w-]))?/.exec(s);
+  if (h) {
+    name = `${h[1]}.${h[2] ?? 'out'}`;
+    rest = s.slice(h[0].length);
+  } else {
+    const id = /^[A-Za-z_][A-Za-z0-9_-]*/.exec(s);
+    if (!id) throw new Error(`bad reference "{{${inner}}}": expected a handle like c3.out or a name`);
+    name = id[0];
+    rest = s.slice(id[0].length);
+  }
+  const jq = jqPart?.trim();
+  return { name, path: parsePath(rest), ...(jq ? { jq } : {}) };
 }
 
 export function formatPath(path: PathSeg[]): string {
@@ -88,4 +136,94 @@ export function setPath(v: unknown, path: PathSeg[], value: unknown): unknown {
     return { ...obj, [key]: setPath(obj[key], rest, value) };
   }
   throw new Error(`cannot set inside ${shapeOf(v)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Substituting {{ … }} refs inside arguments
+
+const TEMPLATE = /(\\?)\{\{((?:(?!\{\{|\}\})[\s\S])*)\}\}/g;
+const WHOLE = /^\s*\{\{((?:(?!\{\{|\}\})[\s\S])*)\}\}\s*$/;
+
+export type Resolved = { value: unknown; hiddenFrom: string[]; wholeRefs: { expr: string; value: unknown }[] };
+
+/** True if any string inside `v` contains an unescaped `{{`. */
+export function hasRefs(v: unknown): boolean {
+  if (typeof v === 'string') return /(^|[^\\])\{\{/.test(v);
+  if (Array.isArray(v)) return v.some(hasRefs);
+  if (v !== null && typeof v === 'object') return Object.values(v).some(hasRefs);
+  return false;
+}
+
+/** Resolves one ref expression (`c3.out.rows | length`) to a value. */
+export async function evalRef(inner: string, resolve: Resolver): Promise<RefTarget> {
+  const expr = parseRefExpr(inner);
+  const target = resolve(expr.name);
+  let value = resolvePath(target.value, expr.path);
+  if (expr.jq) value = await transform(value, expr.jq);
+  return { value, ...(target.hiddenFrom?.length ? { hiddenFrom: target.hiddenFrom } : {}) };
+}
+
+/** Resolves an expression given with or without braces: `c3.out.rows`, `{{ c3.out | length }}`. */
+export async function evalExpr(expr: string, resolve: Resolver): Promise<RefTarget> {
+  const whole = WHOLE.exec(expr);
+  return evalRef(whole ? whole[1]! : expr, resolve);
+}
+
+/**
+ * Deep-walks `args` and replaces every `{{ name[.path] [| jq] }}`.
+ * A string that is exactly one ref becomes the referenced value (any type); refs inside longer text
+ * are inserted as text (strings as-is, other values as JSON). `\{{` yields a literal `{{`.
+ */
+export async function substituteRefs(args: unknown, resolve: Resolver): Promise<Resolved> {
+  const hidden = new Set<string>();
+  const wholeRefs: Resolved['wholeRefs'] = [];
+
+  const one = async (inner: string): Promise<unknown> => {
+    let t: RefTarget;
+    try {
+      t = await evalRef(inner, resolve);
+    } catch (e) {
+      throw new Error(`${(e as Error).message} in "{{${inner}}}" (to send literal braces, write \\{{)`);
+    }
+    t.hiddenFrom?.forEach((s) => hidden.add(s));
+    return t.value;
+  };
+
+  const walk = async (v: unknown): Promise<unknown> => {
+    if (typeof v === 'string') {
+      if (!v.includes('{{')) return v;
+      const whole = WHOLE.exec(v);
+      if (whole && !v.trimStart().startsWith('\\')) {
+        const value = await one(whole[1]!);
+        wholeRefs.push({ expr: whole[1]!.trim(), value });
+        return value;
+      }
+      let out = '';
+      let last = 0;
+      for (const m of v.matchAll(TEMPLATE)) {
+        out += v.slice(last, m.index);
+        if (m[1]) out += `{{${m[2]}}}`; // escaped
+        else {
+          const val = await one(m[2]!);
+          out += typeof val === 'string' ? val : JSON.stringify(val);
+        }
+        last = m.index! + m[0].length;
+      }
+      return out + v.slice(last);
+    }
+    if (Array.isArray(v)) {
+      const res: unknown[] = [];
+      for (const x of v) res.push(await walk(x));
+      return res;
+    }
+    if (v !== null && typeof v === 'object') {
+      const res: Record<string, unknown> = {};
+      for (const [k, x] of Object.entries(v)) res[k] = await walk(x);
+      return res;
+    }
+    return v;
+  };
+
+  const value = await walk(args);
+  return { value, hiddenFrom: [...hidden], wholeRefs };
 }

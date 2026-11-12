@@ -13,11 +13,13 @@ import { HOSTS, applyImport, describePlan, hostConfigPath, planImport, type Host
 import type { ServerConfig } from './types.js';
 import { VERSION } from './version.js';
 import { runDemoDbServer } from './demo/sqlite-server.js';
+import { serveHttp } from './http.js';
 
 const USAGE = `mcp-pipe ${VERSION}
 
 Usage:
   mcp-pipe [--config <servers.json>]          run the proxy over stdio (default ~/.mcp-pipe/servers.json)
+  mcp-pipe --http <port> [--host 127.0.0.1]   serve the proxy over streamable HTTP at /mcp instead
   mcp-pipe import <${HOSTS.join('|')}> [--dry-run] [--overwrite] [--host-config <file>] [--config <servers.json>]
                                               move a host's MCP servers behind mcp-pipe
   mcp-pipe demo-db                            run a demo SQLite MCP server (for trying mcp-pipe out)
@@ -67,20 +69,34 @@ async function runProxy(argv: string[]): Promise<void> {
     : new SqliteStore(cfg.store?.path ?? path.join(defaultDir(), 'store.db'), { ttlDays: cfg.store?.ttlDays });
   const pool = await DownstreamPool.start(cfg);
   for (const [name, err] of Object.entries(pool.errors())) console.error(`mcp-pipe: server "${name}" failed: ${err}`);
-  const server = createProxy(pool, store, { session: randomUUID() });
+  const ttlMs = (cfg.store?.ttlDays ?? 7) * 86_400_000;
+  setInterval(() => store.purge(Date.now() - ttlMs), 3_600_000).unref();
+
+  const httpPort = flag(argv, '--http');
   let closing = false;
+  let close: () => Promise<void>;
+  if (httpPort !== undefined) {
+    const port = Number(httpPort);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--http needs a port number, got "${httpPort}"`);
+    const srv = await serveHttp({ pool, store, config: cfg, port, host: flag(argv, '--host') });
+    console.error(`mcp-pipe: serving MCP over HTTP at ${srv.url}`);
+    close = srv.close;
+  } else {
+    const server = createProxy(pool, store, { session: randomUUID(), config: cfg });
+    await server.connect(new StdioServerTransport());
+    process.stdin.on('close', () => void shutdown());
+    close = () => server.close().catch(() => {});
+  }
   const shutdown = async () => {
     if (closing) return;
     closing = true;
-    await server.close().catch(() => {});
+    await close();
     await pool.close();
     store.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-  process.stdin.on('close', shutdown);
-  await server.connect(new StdioServerTransport());
 }
 
 async function main(): Promise<void> {

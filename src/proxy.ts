@@ -1,63 +1,61 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
-import type { DownstreamPool, DownstreamTool } from './downstream.js';
+import type { DownstreamPool } from './downstream.js';
 import type { Store } from './store/store.js';
-import type { CallRecord, CallToolResult } from './types.js';
+import type { PipeConfig } from './types.js';
 import { VERSION } from './version.js';
-import { text, type Op, type OpContext } from './ops/context.js';
+import { PipeCore, textResult } from './core.js';
+import { exposeTool } from './schema.js';
+import type { Op } from './ops/context.js';
 import { getOp } from './ops/get.js';
 import { patchOp } from './ops/patch.js';
+import { transformOp } from './ops/transform.js';
+import { mapOp } from './ops/map.js';
 
-export const marker = (id: string) => `⟨pipe:${id}⟩`;
+export { marker } from './core.js';
 
 const INSTRUCTIONS =
   'Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call ' +
-  '(its arguments and its result). pipe__patch re-runs a stored call with modified arguments; ' +
-  'pipe__get reads a stored call\'s arguments or result, or part of them.';
+  '(its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a ' +
+  'stored value, so data can move between tools without being copied. pipe__patch re-runs a stored call with ' +
+  'modified arguments; pipe__get reads a stored value or part of it; pipe__transform reshapes one with jq; ' +
+  'pipe__map calls a tool once per item of a stored list.';
 
-export const OPS: Op[] = [getOp, patchOp];
+export const OPS: Op[] = [getOp, patchOp, transformOp, mapOp];
 
-export function createProxy(pool: DownstreamPool, store: Store, opts: { session: string }): Server {
+export function createProxy(
+  pool: DownstreamPool,
+  store: Store,
+  opts: { session: string; config?: PipeConfig; ops?: Op[]; instructions?: string },
+): Server {
+  const ops = opts.ops ?? OPS;
   const server = new Server(
     { name: 'mcp-pipe', version: VERSION },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { capabilities: { tools: {} }, instructions: opts.instructions ?? INSTRUCTIONS },
   );
-  const index = new Map<string, DownstreamTool>(pool.tools().map((t) => [t.name, t]));
-  const ops = new Map(OPS.map((o) => [o.def.name, o]));
-
-  const execute = async (rec: CallRecord): Promise<CallToolResult> => {
-    let result: CallToolResult;
-    try {
-      result = await pool.call(rec.server, rec.tool, rec.args);
-    } catch (e) {
-      result = { isError: true, content: [{ type: 'text', text: `mcp-pipe: call failed: ${(e as Error).message}` }] };
-    }
-    const isError = result.isError === true;
-    store.finishCall(rec.id, result, isError);
-    return { ...result, content: [...(result.content ?? []), { type: 'text', text: marker(rec.id) }] };
-  };
-  const ctx: OpContext = { pool, store, session: opts.session, execute };
+  const core = new PipeCore(pool, store, opts.config ?? { mcpServers: {} }, opts.session);
+  const byName = new Map(ops.map((o) => [o.def.name, o]));
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const downstream: Tool[] = pool.tools().map((t) => ({ ...t.def, name: t.name }));
-    return { tools: [...downstream, ...OPS.map((o) => o.def)] };
+    const downstream: Tool[] = pool.tools().map((t) => exposeTool(t.def, t.name));
+    return { tools: [...downstream, ...ops.map((o) => o.def)] };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name } = req.params;
     const args = (req.params.arguments ?? {}) as Record<string, unknown>;
-    const op = ops.get(name);
+    const op = byName.get(name);
     if (op) {
       try {
-        return await op.handle(args, ctx);
+        return await op.handle(args, core);
       } catch (e) {
-        return text(`${name}: ${(e as Error).message}`, true);
+        return textResult(`${name}: ${(e as Error).message}`, true);
       }
     }
-    const target = index.get(name);
-    if (!target) return text(`mcp-pipe: unknown tool "${name}"`, true);
-    const rec = store.putCall({ session: opts.session, server: target.server, tool: target.tool, args });
-    return execute(rec);
+    const target = core.index.get(name);
+    if (!target) return textResult(`mcp-pipe: unknown tool "${name}"`, true);
+    const rec = await core.invoke({ server: target.server, tool: target.tool, args });
+    return core.respond(rec);
   });
 
   return server;
