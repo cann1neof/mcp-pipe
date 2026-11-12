@@ -1,4 +1,4 @@
-// Usage: npm run bench -- sql-fix [--runs 10] [--mode direct|pipe|both]
+// Usage: npm run bench -- sql-fix [--runs 10] [--mode direct|pipe|both] [--verbose]
 // Credentials: ANTHROPIC_API_KEY (read from .env if present). Model: BENCH_MODEL (default claude-opus-5-5).
 import fs from 'node:fs';
 import os from 'node:os';
@@ -42,14 +42,19 @@ async function main() {
   const modes: Mode[] = modeArg === 'both' ? ['direct', 'pipe'] : [modeArg as Mode];
   const model = process.env.BENCH_MODEL ?? 'claude-opus-5-5';
   const effort = process.env.BENCH_EFFORT as 'low' | 'medium' | 'high' | undefined;
+  const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');
   const summary: Record<string, unknown> = {};
 
   for (const mode of modes) {
     const results: (AgentRun & { success: boolean })[] = [];
     for (let i = 0; i < runs; i++) {
+      if (verbose) console.log(`\n${taskName} ${mode} #${i + 1}`);
       const tools = await mcpTools(serverFor(mode));
       try {
-        const r = await runAgent({ prompt: task.PROMPT, system: task.SYSTEM, tools, model, effort });
+        const r = await runAgent({
+          prompt: task.PROMPT, system: task.SYSTEM, tools, model, effort,
+          ...(verbose ? { log: (l: string) => console.log(l) } : {}),
+        });
         results.push({ ...r, success: task.succeeded(r) });
       } finally {
         await tools.close();
@@ -68,6 +73,7 @@ async function main() {
     };
     summary[mode] = s;
     const out = path.join(root, 'bench', 'results', `${taskName}-${mode}.json`);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, JSON.stringify({ task: taskName, mode, date: new Date().toISOString(), summary: s, results }, null, 2));
     console.log(`→ ${path.relative(root, out)}`);
   }

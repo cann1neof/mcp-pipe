@@ -20,14 +20,16 @@ describe('bench agent', () => {
       { stop_reason: 'end_turn', usage: usage(150, 10), content: [{ type: 'text', text: 'done' }] },
     ];
     const seen: Anthropic.MessageCreateParamsNonStreaming[] = [];
+    const lines: string[] = [];
     const run = await runAgent({
-      prompt: 'go', tools: stubTools, model: 'm',
+      prompt: 'go', tools: stubTools, model: 'm', log: (l) => lines.push(l),
       createMessage: async (p) => { seen.push(structuredClone(p)); return replies.shift() as unknown as Anthropic.Message; },
     });
     expect(run).toMatchObject({ inputTokens: 250, outputTokens: 50, cacheReadTokens: 10, turns: 2, finalText: 'done' });
     expect(run.toolCalls).toEqual([{ name: 'db__query', args: { sql: 'x' }, isError: false, text: '[]' }]);
     expect(seen[0]!.system).toContain('server says hi');
     expect(seen[1]!.messages).toHaveLength(3);
+    expect(lines.join('\n')).toMatch(/turn 1: in=105 out=40 stop=tool_use[\s\S]*→ db__query \{"sql":"x"\}[\s\S]*← \[\][\s\S]*AI: done/);
   });
 });
 
