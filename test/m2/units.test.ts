@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Ajv } from 'ajv';
 import { transform } from '../../src/jq.js';
 import { substituteRefs, parseRefExpr, type Resolver } from '../../src/refs.js';
-import { widenSchema } from '../../src/schema.js';
+import { coerceJsonStrings, widenSchema } from '../../src/schema.js';
 import { shapeOf, preview } from '../../src/values.js';
 import { maskError, policyFor } from '../../src/policy.js';
 import { ConfirmTokens, gate, isWrite } from '../../src/security.js';
@@ -160,5 +160,23 @@ describe('config paths', () => {
     const c = parseConfig({ mcpServers: {}, store: { path: '~/x/store.db' }, recipesDir: '~/r' });
     expect(c.store!.path).toBe(`${os.homedir()}/x/store.db`);
     expect(c.recipesDir).toBe(`${os.homedir()}/r`);
+  });
+});
+
+describe('coerceJsonStrings', () => {
+  const schema = { type: 'object', properties: {
+    rows: { type: 'array' }, opts: { anyOf: [{ type: 'object' }, { type: 'null' }] }, n: { type: 'number' },
+    text: { type: 'string' }, loose: {}, either: { type: ['string', 'array'] },
+  } };
+  it('parses JSON text for non-string properties when the type matches', () => {
+    expect(coerceJsonStrings({ rows: '[[1,"a"]]', opts: '{"x":1}', n: '3' }, schema)).toEqual({ rows: [[1, 'a']], opts: { x: 1 }, n: 3 });
+  });
+  it('leaves refs, string properties, untyped properties, bad JSON and wrong types alone', () => {
+    const args = { rows: '{{ c1.out }}', text: '[1]', loose: '[1]', either: '[1]', opts: '[1]', n: 'three' };
+    expect(coerceJsonStrings(args, schema)).toBe(args);
+  });
+  it('no schema → unchanged', () => {
+    const args = { rows: '[1]' };
+    expect(coerceJsonStrings(args, undefined)).toBe(args);
   });
 });

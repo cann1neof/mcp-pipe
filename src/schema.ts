@@ -35,3 +35,47 @@ export function exposeTool(def: Tool, name: string): Tool {
   const description = [def.description, REF_HINT].filter(Boolean).join('\n\n');
   return { ...rest, name, description, inputSchema: widenSchema(def.inputSchema as JSONSchema) as Tool['inputSchema'] };
 }
+
+const JSON_TYPES = new Set(['array', 'object', 'number', 'integer', 'boolean', 'null']);
+
+/** JSON types a property schema accepts, or undefined when the schema does not say. */
+function acceptedTypes(p: unknown): Set<string> | undefined {
+  if (!p || typeof p !== 'object') return undefined;
+  const s = p as JSONSchema;
+  if (typeof s.type === 'string') return new Set([s.type]);
+  if (Array.isArray(s.type)) return new Set(s.type as string[]);
+  const alts = (s.anyOf ?? s.oneOf) as unknown[] | undefined;
+  if (!Array.isArray(alts)) return undefined;
+  const out = new Set<string>();
+  for (const a of alts) {
+    const t = acceptedTypes(a);
+    if (!t) return undefined;
+    t.forEach((x) => out.add(x));
+  }
+  return out;
+}
+
+const typeOf = (v: unknown) =>
+  v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v === 'number' ? (Number.isInteger(v) ? 'integer' : 'number') : typeof v;
+
+/**
+ * Hosts sometimes send an array or object argument as JSON text (`"[[1,2]]"`), which the widened schema allows
+ * because it also accepts ref strings. For top-level properties whose original schema does not accept a string,
+ * a string that is not a ref and parses as JSON of an accepted type is replaced by the parsed value.
+ */
+export function coerceJsonStrings(args: unknown, schema: JSONSchema | undefined): unknown {
+  const props = schema?.properties as Record<string, unknown> | undefined;
+  if (!props || !args || typeof args !== 'object' || Array.isArray(args)) return args;
+  let out: Record<string, unknown> | undefined;
+  for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
+    if (typeof v !== 'string' || v.includes('{{')) continue;
+    const types = acceptedTypes(props[k]);
+    if (!types || types.has('string') || ![...types].some((t) => JSON_TYPES.has(t))) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(v); } catch { continue; }
+    const t = typeOf(parsed);
+    if (!types.has(t) && !(t === 'integer' && types.has('number'))) continue;
+    (out ??= { ...(args as Record<string, unknown>) })[k] = parsed;
+  }
+  return out ?? args;
+}

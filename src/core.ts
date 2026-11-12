@@ -6,6 +6,7 @@ import { evalExpr, hasRefs, substituteRefs, type RefTarget, type Resolver } from
 import { maskError, policyFor, strictest, type ResolvedPolicy } from './policy.js';
 import { ConfirmTokens } from './security.js';
 import { errorText, hasBinary, preview, resultValue, shapeOf, textBytes } from './values.js';
+import { coerceJsonStrings } from './schema.js';
 
 export const marker = (id: string) => `⟨pipe:${id}⟩`;
 export const DEFAULT_PEEK_BYTES = 8192;
@@ -94,13 +95,15 @@ export class PipeCore {
    * not data); refs are resolved just before forwarding. Never throws: failures become isError results.
    */
   async invoke(o: { server: string; tool: string; args: unknown; parent?: string; resolver?: Resolver }): Promise<CallRecord> {
+    const def = this.pool.tools().find((t) => t.server === o.server && t.tool === o.tool)?.def;
+    const given = coerceJsonStrings(o.args ?? {}, def?.inputSchema as Record<string, unknown> | undefined);
     const rec = this.store.putCall({
-      session: this.session, server: o.server, tool: o.tool, args: o.args ?? {}, ...(o.parent ? { parent: o.parent } : {}),
+      session: this.session, server: o.server, tool: o.tool, args: given, ...(o.parent ? { parent: o.parent } : {}),
     });
     let result: CallToolResult;
     let hiddenFrom: string[] = [];
     try {
-      let args: unknown = o.args ?? {};
+      let args: unknown = given;
       let wholeRefs: { expr: string; value: unknown }[] = [];
       if (hasRefs(args)) {
         const r = await substituteRefs(args, o.resolver ?? this.resolver());

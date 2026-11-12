@@ -22,6 +22,16 @@ describe('refs in direct calls', () => {
     const p = await h.call('pipe__patch', { call: c, edits: [{ find: 'map(.id)', replace: 'map(.id * 10)' }] });
     expect(texts(p)[0]).toBe('60');
   });
+  it('an array argument sent as JSON text is parsed before forwarding and stored parsed', async () => {
+    const r = await h.call('echo__sum', { values: '[1, 2, 3]' });
+    expect(r.isError).toBeFalsy();
+    expect(texts(r)[0]).toBe('6');
+    expect(h.store.getCall(handleOf(r))!.args).toEqual({ values: [1, 2, 3] });
+  });
+  it('JSON text of the wrong type is forwarded as is (downstream error)', async () => {
+    const r = await h.call('echo__sum', { values: '{"a": 1}' });
+    expect(r.isError).toBe(true);
+  });
   it('embedded ref inside text', async () => {
     const j = handleOf(await h.call('echo__json', { value: { hash: 'deadbeef' } }));
     const r = await h.call('echo__echo', { text: `prefix {{ ${j}.out.hash | .[0:4] }}%` });
