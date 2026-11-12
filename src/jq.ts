@@ -39,12 +39,12 @@ class JqWorker {
   private ensure(): Worker {
     if (this.worker) return this.worker;
     const w = new Worker(WORKER_SRC, { eval: true });
-    w.unref();
     w.on('message', (m: { id: number; ok: boolean; out?: unknown[]; error?: string }) => {
       const p = this.pending.get(m.id);
       if (!p) return;
       this.pending.delete(m.id);
       clearTimeout(p.timer);
+      if (this.pending.size === 0) w.unref();
       if (m.ok) p.resolve(m.out ?? []);
       else p.reject(new JqError(m.error ?? 'jq failed'));
     });
@@ -54,6 +54,8 @@ class JqWorker {
       this.worker = undefined;
       this.failAll(new Error('jq worker exited'));
     });
+    // unref last: attaching a 'message' listener re-refs the worker's port, which would keep the process alive.
+    w.unref();
     this.worker = w;
     return w;
   }
@@ -76,6 +78,7 @@ class JqWorker {
         this.failAll(new JqError('jq worker restarted after a timeout'));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
+      w.ref(); // keep the process alive only while work is pending
       w.postMessage({ id, input, filter, flags });
     });
   }

@@ -8,9 +8,9 @@ import { PipeCore, textResult } from './core.js';
 import { exposeTool } from './schema.js';
 import type { Op } from './ops/context.js';
 import { getOp } from './ops/get.js';
-import { patchOp } from './ops/patch.js';
 import { transformOp } from './ops/transform.js';
 import { mapOp } from './ops/map.js';
+import { defineOp, patchAnyOp, recipesOp, resumeOp, runOp, saveOp } from './ops/chain.js';
 
 export { marker } from './core.js';
 
@@ -19,9 +19,11 @@ const INSTRUCTIONS =
   '(its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a ' +
   'stored value, so data can move between tools without being copied. pipe__patch re-runs a stored call with ' +
   'modified arguments; pipe__get reads a stored value or part of it; pipe__transform reshapes one with jq; ' +
-  'pipe__map calls a tool once per item of a stored list.';
+  'pipe__map calls a tool once per item of a stored list. For work with several steps, pipe__run executes a whole ' +
+  'plan (a chain of tool calls, jq steps, per-item calls and pauses for judgement) in one request; working plans ' +
+  'can be saved as recipes (pipe__save) and run again by name.';
 
-export const OPS: Op[] = [getOp, patchOp, transformOp, mapOp];
+export const OPS: Op[] = [getOp, patchAnyOp, transformOp, mapOp, runOp, defineOp, resumeOp, saveOp, recipesOp];
 
 export function createProxy(
   pool: DownstreamPool,
