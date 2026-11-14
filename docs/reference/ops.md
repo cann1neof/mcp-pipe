@@ -24,7 +24,7 @@ Re-run a stored call with edits, or fix a step of a run.
 | `run` | boolean? (with `call`) | `false` stores the new call without running |
 | `run` + `step` | string, string | patch a chain step instead; continues the run from it |
 | `rerun` | boolean? | with `run` + `step`: `false` only patches |
-| `confirm` | string? | token, when the patched run has write steps |
+| `confirm` | string? | token, when `confirmWrites` is on and the patched run has write steps |
 
 Errors: no match for a `find` (nothing runs); unknown handle / run / step; patched chain invalid.
 
@@ -48,30 +48,25 @@ Call a tool once per item of a stored list.
 | `args` | object | per-call arguments; `{{ item }}`, `{{ item.path }}` |
 | `concurrency` | number? | default 4, max 32 |
 | `dry_run` | boolean? | plan only |
-| `confirm` | string? | token from `needs_confirm` |
+| `confirm` | string? | token from `needs_confirm` (only with `confirmWrites`) |
 
 Returns `{ok, failed: [{index, error}], handles, outputs}` or `{status: "needs_confirm", plan, confirm}`.
 
 ## pipe__run
 
-Run a plan: exactly one of `chain`, `run`, `recipe`.
+Run a plan: exactly one of `chain`, `run`.
 
 | arg | type | |
 |---|---|---|
-| `chain` | object / string | new chain (see [Plans](../guide/chains)) |
+| `chain` | object / string | new chain, or its YAML/JSON text, e.g. from a skill (see [Plans](../guide/chains)) |
 | `run` | string | existing run id |
-| `recipe` | string | saved recipe name |
 | `params` | object? | chain params |
 | `from` | string? | step to run again from |
-| `dry_run` | boolean? | plan only |
-| `confirm` | string? | token |
+| `dry_run` | boolean? | validate, store, return the plan; run nothing |
+| `confirm` | string? | token (only with `confirmWrites`) |
 | `force` | boolean? | repeat map items that already succeeded |
 
 Returns one of `done` (`outputs`, `result`), `failed` (`step`, `error`, `next`), `paused` (see [AI steps](../guide/ai-steps)), `needs_confirm`, `dry_run`.
-
-## pipe__define
-
-Validate a chain and store it as a run without executing. Returns `{run, steps, plan}`. Read-only.
 
 ## pipe__resume
 
@@ -83,16 +78,3 @@ Validate a chain and store it as a run without executing. Returns `{run, steps, 
 | `output` | any | checked against the step's `expect` |
 
 Returns `rejected` (with `reason`; run stays paused), `paused` (other chunks open), or the run's next reply.
-
-## pipe__save
-
-| arg | type | |
-|---|---|---|
-| `run` | string | run whose chain to save |
-| `name` | string | letters, digits, `-`, `_` |
-| `description` | string? | |
-| `overwrite` | boolean? | |
-
-## pipe__recipes
-
-Lists `{name, description, params}` of saved recipes (and parse errors, if any). Read-only.

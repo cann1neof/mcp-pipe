@@ -10,20 +10,17 @@ import type { Op } from './ops/context.js';
 import { getOp } from './ops/get.js';
 import { transformOp } from './ops/transform.js';
 import { mapOp } from './ops/map.js';
-import { defineOp, patchAnyOp, recipesOp, resumeOp, runOp, saveOp } from './ops/chain.js';
+import { patchAnyOp, resumeOp, runOp } from './ops/chain.js';
 
 export { marker } from './core.js';
 
 const INSTRUCTIONS =
-  'Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call ' +
-  '(its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a ' +
-  'stored value, so data can move between tools without being copied. pipe__patch re-runs a stored call with ' +
-  'modified arguments; pipe__get reads a stored value or part of it; pipe__transform reshapes one with jq; ' +
-  'pipe__map calls a tool once per item of a stored list. For work with several steps, pipe__run executes a whole ' +
-  'plan (a chain of tool calls, jq steps, per-item calls and pauses for judgement) in one request; working plans ' +
-  'can be saved as recipes (pipe__save) and run again by name.';
+  'Every tool result ends with "saved as {{ cN.out }}". Pass saved results to other tools as arguments ' +
+  '("{{ c3.out }}", "{{ c3.out.rows }}", "{{ c3.out | <jq> }}") instead of copying data; compute derived values ' +
+  '(percentages, totals, formatting) in the query or with jq over the saved result. pipe__patch repeats a call with ' +
+  'only the changed arguments. pipe__run executes several steps as one pipe (tool calls, jq, per-item calls).';
 
-export const OPS: Op[] = [getOp, patchAnyOp, transformOp, mapOp, runOp, defineOp, resumeOp, saveOp, recipesOp];
+export const OPS: Op[] = [getOp, patchAnyOp, transformOp, mapOp, runOp, resumeOp];
 
 export function createProxy(
   pool: DownstreamPool,

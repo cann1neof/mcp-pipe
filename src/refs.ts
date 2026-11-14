@@ -84,6 +84,9 @@ export function parseRefExpr(inner: string): RefExpr {
     name = id[0];
     rest = s.slice(id[0].length);
   }
+  if (!/^(\s*(\.\s*[A-Za-z_][\w-]*|\[\s*(-?\d+|"[^"]*"|'[^']*')\s*\]))*\s*$/.test(rest)) {
+    throw new Error(`bad reference "{{${inner}}}": expected a handle like c3.out with an optional .path and | jq`);
+  }
   const jq = jqPart?.trim();
   return { name, path: parsePath(rest), ...(jq ? { jq } : {}) };
 }
@@ -156,11 +159,56 @@ export function hasRefs(v: unknown): boolean {
 
 /** Resolves one ref expression (`c3.out.rows | length`) to a value. */
 export async function evalRef(inner: string, resolve: Resolver): Promise<RefTarget> {
-  const expr = parseRefExpr(inner);
+  let expr: RefExpr;
+  try {
+    expr = parseRefExpr(inner);
+  } catch (e) {
+    const general = await evalJqWithHandles(inner, resolve);
+    if (general) return general;
+    throw e;
+  }
   const target = resolve(expr.name);
   let value = resolvePath(target.value, expr.path);
   if (expr.jq) value = await transform(value, expr.jq);
   return { value, ...(target.hiddenFrom?.length ? { hiddenFrom: target.hiddenFrom } : {}) };
+}
+
+/**
+ * The general form: any jq expression that mentions saved results by handle, e.g.
+ * `{{ [["name","total"]] + (c7.out | map([.name, .total])) }}`. Handles outside string literals become jq
+ * variables. Returns undefined when the expression mentions no handle.
+ */
+async function evalJqWithHandles(inner: string, resolve: Resolver): Promise<RefTarget | undefined> {
+  const vars: Record<string, unknown> = {};
+  const hidden = new Set<string>();
+  let out = '';
+  let quote = false;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]!;
+    if (quote) {
+      out += ch;
+      if (ch === '\\') { out += inner[++i] ?? ''; continue; }
+      if (ch === '"') quote = false;
+      continue;
+    }
+    if (ch === '"') { quote = true; out += ch; continue; }
+    const m = /^\$?(c\d+)(?:\.(in|out))?(?![\w-])/.exec(inner.slice(i));
+    if (m && !/[\w$.]/.test(inner[i - 1] ?? '')) {
+      const v = `__${m[1]}_${m[2] ?? 'out'}`;
+      if (!(v in vars)) {
+        const t = resolve(`${m[1]}.${m[2] ?? 'out'}`);
+        vars[v] = t.value;
+        t.hiddenFrom?.forEach((h) => hidden.add(h));
+      }
+      out += `$${v}`;
+      i += m[0].length - 1;
+      continue;
+    }
+    out += ch;
+  }
+  if (!Object.keys(vars).length) return undefined;
+  const value = await transform(null, out, vars);
+  return { value, ...(hidden.size ? { hiddenFrom: [...hidden] } : {}) };
 }
 
 /** Resolves an expression given with or without braces: `c3.out.rows`, `{{ c3.out | length }}`. */

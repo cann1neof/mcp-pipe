@@ -31,7 +31,7 @@ describe('e2e: SQL fix via patch', () => {
     } })) as any;
     expect(bad.isError).toBe(true);
     expect(texts(bad)[0]).toMatch(/usr_id/);
-    const id = texts(bad).at(-1)!.slice(6, -1);
+    const id = texts(bad).at(-1)!.match(/\{\{ (c\d+)\.out/)![1]!;
     const fixed = (await client.callTool({ name: 'pipe__patch', arguments: { call: id, edits: [{ find: 'usr_id', replace: 'user_id' }] } })) as any;
     expect(fixed.isError).toBeFalsy();
     const rows = JSON.parse(texts(fixed)[0]!);

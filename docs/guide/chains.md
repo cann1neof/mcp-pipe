@@ -32,10 +32,9 @@ Checked before anything runs: step ids are unique; each step has exactly one kin
 ## Running
 
 - `pipe__run {chain, params}` — define and run.
-- `pipe__define {chain}` — validate and store as a run without executing; returns the run id and plan.
 - `pipe__run {run: "r1"}` — run (or continue) an existing run.
 - `pipe__run {run, from: "<step>"}` — run again from a step; earlier outputs are reused.
-- `dry_run: true` — the plan only.
+- `dry_run: true` — validate and store the run, return the plan, run nothing.
 
 Reply when done:
 
@@ -55,9 +54,9 @@ The run stops (`status: failed`, with the step and error). Fix the step and cont
 
 `pipe__patch` with `run` + `step` edits the step definition (any field: `args`, `jq`, `over`, `call`, …), re-checks the chain, and re-runs from that step. Earlier steps are not repeated — also after mcp-pipe restarts, because runs and outputs are stored.
 
-## Confirm
+## Confirm (optional)
 
-If any step uses a tool that can change data, the first reply is the plan and a confirm token (see [Map](./map#confirm-for-tools-that-can-change-data)). One confirm covers the run, including after AI pauses, until the chain is patched.
+Steps run without asking by default. With `confirmWrites: true` in the config, a plan with a tool that can change data first returns the plan and a confirm token (see [Map](./map#optional-confirm-for-tools-that-can-change-data)). One confirm covers the run, including after AI pauses, until the chain is patched.
 
 ## Map steps are idempotent
 

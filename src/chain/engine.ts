@@ -130,7 +130,7 @@ export class Engine {
 
     const plan = this.plan(r, opts.from);
     if (opts.dryRun) return { status: 'dry_run', run: r.id, plan };
-    if (!r.approved) {
+    if (!r.approved && this.core.cfg.confirmWrites === true) {
       const needs = gate(this.core.confirms, plan, opts.confirm);
       if (needs) { this.save(r); return { ...needs, run: r.id }; }
       if (plan.some((p) => p.writes)) r.approved = true; // one confirm covers the run until its chain is patched

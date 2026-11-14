@@ -71,9 +71,11 @@ export async function patchCall(args: Record<string, unknown>, core: import('../
 }
 
 export const PATCH_DESCRIPTION =
-  'Re-run an earlier tool call with modified arguments. The call\'s stored arguments are copied, ' +
-  'the edits are applied to the copy, and the result is executed as a new call with its own handle. ' +
-  'Edit forms: {find, replace} replaces text in string arguments (all of them, or only under "path"); ' +
+  'Re-run an earlier tool call with modified arguments. Use it whenever a call needs to be repeated with a change — ' +
+  'it failed, or you want a different filter, column, limit or target — instead of writing the whole call again: ' +
+  'you send only the change, and the arguments stay exactly as they were everywhere else. ' +
+  'The call\'s stored arguments are copied, the edits are applied to the copy, and the result is executed as a new call ' +
+  'with its own handle. Edit forms: {find, replace} replaces text in string arguments (all of them, or only under "path"); ' +
   '{path, set} sets the value at "path". With no edits the call is re-run unchanged.';
 
 export const patchOp: Op = {

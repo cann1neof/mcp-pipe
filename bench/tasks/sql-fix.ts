@@ -76,7 +76,7 @@ export function succeeded(run: AgentRun): boolean {
   const want = JSON.stringify(expectedRows());
   return run.toolCalls.some((c) => {
     if (c.isError) return false;
-    const firstBlock = c.text.split('\n⟨pipe:')[0]!;
+    const firstBlock = c.text.split('\nsaved as {{')[0]!;
     try { return JSON.stringify(JSON.parse(firstBlock)) === want; } catch { return false; }
   });
 }

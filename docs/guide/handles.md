@@ -4,7 +4,7 @@ Every tool call made through mcp-pipe is stored, and its result ends with a hand
 
 ```
 [{"country":"IL","orders":112}, …]
-⟨pipe:c3⟩
+saved as {{ c3.out }}
 ```
 
 - `c3.out` — the result of call 3 (parsed JSON if the result is JSON text)

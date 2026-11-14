@@ -1,4 +1,4 @@
-// Bulk operations that write are shown as a plan and need a one-time confirm token.
+// Optional (config confirmWrites): bulk operations that write are shown as a plan and need a one-time confirm token.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
@@ -38,8 +38,8 @@ export type NeedsConfirm = { status: 'needs_confirm'; plan: PlanStep[]; confirm:
  * Gate for bulk work. Read-only plans pass. Write plans need `confirm` (a token from an earlier needs_confirm reply).
  * Returns a needs_confirm payload to send back, or undefined if the work may run.
  */
-export function gate(tokens: ConfirmTokens, plan: PlanStep[], confirm: string | undefined): NeedsConfirm | undefined {
-  if (!plan.some((s) => s.writes)) return undefined;
+export function gate(tokens: ConfirmTokens, plan: PlanStep[], confirm: string | undefined, enabled = true): NeedsConfirm | undefined {
+  if (!enabled || !plan.some((s) => s.writes)) return undefined;
   if (confirm) {
     tokens.consume(confirm, plan);
     return undefined;

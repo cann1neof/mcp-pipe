@@ -1,6 +1,5 @@
 import type { PipeCore } from '../core.js';
 import { Engine } from '../chain/engine.js';
-import { listRecipes, loadRecipe, recipesDir, saveRecipe } from '../recipes.js';
 import { json, type Op } from './context.js';
 import { editsOf, patchCall, PATCH_DESCRIPTION } from './patch.js';
 
@@ -25,39 +24,27 @@ const chainProps = {
   params: { type: 'object', description: 'values for the chain\'s params' },
 };
 
-export const defineOp: Op = {
-  def: {
-    name: 'pipe__define',
-    description: `Validate a chain and store it as a run without executing it. Returns the run id and its plan. ${CHAIN_FORMAT}`,
-    inputSchema: { type: 'object', properties: chainProps, required: ['chain'] },
-    annotations: { readOnlyHint: true },
-  },
-  async handle(args, core) {
-    const e = engineFor(core);
-    const r = e.define(args.chain as object, (args.params ?? {}) as Record<string, unknown>);
-    return json({ run: r.id, steps: r.chain.steps.map((s) => s.id), plan: e.plan(r) });
-  },
-};
-
 export const runOp: Op = {
   def: {
     name: 'pipe__run',
     description:
-      'Run a multi-step plan in one request: pass a new "chain", an existing "run" id, or a saved "recipe" name with "params". ' +
+      'Run a multi-step plan in one request: pass a new "chain" (JSON or YAML text, e.g. copied from a skill) with its "params", ' +
+      'or an existing "run" id to run it again. ' +
+      'Use it as soon as you know the remaining steps — typically after a few single calls to look at the inputs — and ' +
+      'especially when one step\'s result feeds the next: the steps run back to back without a round trip to you, ' +
+      'intermediate results stay stored instead of passing through the conversation, and a failed step is fixed in place. ' +
       `${CHAIN_FORMAT} ` +
       'The reply lists each step\'s output handle and the last step\'s result. A failing step stops the run; fix it with ' +
-      'pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. Plans with tools that can ' +
-      'change data need a confirm: the first reply is the plan and a token, then repeat the call with "confirm". ' +
+      'pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. ' +
       '"from" re-runs from a step; "dry_run" returns the plan; "force" repeats map items that already succeeded.',
     inputSchema: {
       type: 'object',
       properties: {
         ...chainProps,
         run: { type: 'string', description: 'existing run id, e.g. "r1"' },
-        recipe: { type: 'string', description: 'saved recipe name' },
         from: { type: 'string', description: 'step id to run again from' },
-        dry_run: { type: 'boolean' },
-        confirm: { type: 'string', description: 'token from a needs_confirm reply' },
+        dry_run: { type: 'boolean', description: 'validate and return the plan without running it' },
+        confirm: { type: 'string', description: 'only if a reply asked for it: the token from that needs_confirm reply' },
         force: { type: 'boolean' },
       },
     },
@@ -65,12 +52,9 @@ export const runOp: Op = {
   async handle(args, core) {
     const e = engineFor(core);
     const params = (args.params ?? {}) as Record<string, unknown>;
-    const given = ['chain', 'run', 'recipe'].filter((k) => args[k] !== undefined);
-    if (given.length !== 1) throw new Error('pass exactly one of "chain", "run" or "recipe"');
-    let id: string;
-    if (args.chain !== undefined) id = e.define(args.chain as object, params).id;
-    else if (args.recipe !== undefined) id = e.define(loadRecipe(recipesDir(core.cfg.recipesDir), String(args.recipe)), params).id;
-    else id = String(args.run);
+    const given = ['chain', 'run'].filter((k) => args[k] !== undefined);
+    if (given.length !== 1) throw new Error('pass exactly one of "chain" or "run"');
+    const id = args.chain !== undefined ? e.define(args.chain as object, params).id : String(args.run);
     const reply = await e.run(id, {
       ...(typeof args.from === 'string' ? { from: args.from } : {}),
       ...(typeof args.confirm === 'string' ? { confirm: args.confirm } : {}),
@@ -105,44 +89,6 @@ export const resumeOp: Op = {
   },
 };
 
-export const saveOp: Op = {
-  def: {
-    name: 'pipe__save',
-    description: 'Save the chain of a run as a reusable recipe. Run it later with pipe__run {recipe, params}.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        run: { type: 'string' },
-        name: { type: 'string', description: 'letters, digits, "-" or "_"' },
-        description: { type: 'string' },
-        overwrite: { type: 'boolean' },
-      },
-      required: ['run', 'name'],
-    },
-  },
-  async handle(args, core) {
-    const r = engineFor(core).getRun(String(args.run));
-    const file = saveRecipe(recipesDir(core.cfg.recipesDir), String(args.name), r.chain, {
-      ...(typeof args.description === 'string' ? { description: args.description } : {}),
-      overwrite: args.overwrite === true,
-    });
-    return json({ saved: String(args.name), file, params: r.chain.params ?? {} });
-  },
-};
-
-export const recipesOp: Op = {
-  def: {
-    name: 'pipe__recipes',
-    description: 'List saved recipes with their descriptions and params.',
-    inputSchema: { type: 'object', properties: {} },
-    annotations: { readOnlyHint: true },
-  },
-  async handle(_args, core) {
-    return json(listRecipes(recipesDir(core.cfg.recipesDir)));
-  },
-};
-
-/** pipe__patch, extended: {call} patches a stored call; {run, step} patches a chain step and re-runs from it. */
 export const patchAnyOp: Op = {
   def: {
     name: 'pipe__patch',

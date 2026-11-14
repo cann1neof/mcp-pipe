@@ -18,7 +18,8 @@ export type PipeConfig = {
   mcpServers: Record<string, ServerConfig>;
   store?: { path?: string; ttlDays?: number; memoryOnly?: boolean };
   peek?: { maxBytes?: number };
-  recipesDir?: string;
+  /** Ask for a one-time confirm token before plans or maps that call write tools. Default false. */
+  confirmWrites?: boolean;
 };
 
 export type CallRecord = {

@@ -1,3 +1,4 @@
+import { marker } from '../core.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { PipeCore } from '../core.js';
 import type { CallToolResult } from '../types.js';
@@ -13,7 +14,7 @@ export { textResult as text } from '../core.js';
 export const json = (v: unknown, handle?: string, isError = false): CallToolResult => ({
   content: [
     { type: 'text', text: JSON.stringify(v, null, 2) },
-    ...(handle ? [{ type: 'text' as const, text: `⟨pipe:${handle}⟩` }] : []),
+    ...(handle ? [{ type: 'text' as const, text: marker(handle) }] : []),
   ],
   ...(isError ? { isError: true } : {}),
 });

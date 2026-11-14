@@ -1,0 +1,121 @@
+prompt: count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics
+model: claude-opus-5-5
+  system: Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call (its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a stored value, so data can move between tools without being copied. To repeat a call with a change (after an error, or to adjust it), use pipe__patch and send only the change instead of the whole call. pipe__get reads a stored value or part of it; pipe__transform reshapes one with jq; pipe__map calls a tool once per item of a stored list. For work with several steps: look at the inputs with single calls first, then write the remaining steps as one plan and execute it with pipe__run (tool calls, jq steps, per-item calls and pauses for judgement) instead of calling the tools one by one. Working plans can be saved as recipes (pipe__save) and run again by name.
+  tools: chat__list_channels, chat__post_message, db__run_query, db__get_table_description, sheets__create_spreadsheet, sheets__update_values, sheets__get_values, pipe__get, pipe__patch, pipe__transform, pipe__map, pipe__run, pipe__define, pipe__resume, pipe__save, pipe__recipes
+  ── turn 1: in=5078 out=90 stop=tool_use
+  AI: Let me look at the table first.
+  → db__get_table_description {"table":"users_data"}
+  → chat__list_channels {}
+  ← {"table":"users_data","description":"Product analytics events. One row per user event.","columns":[{"name":"event_id","type":"INTEGER","description":"Unique identifier of the event."},{"name":"usr_id","type":"INTEGER","description":"Identifier of the user who performed the event."},{"name":"signup_date","type":"TEXT","description":"Date the user created their account (YYYY-MM-DD)."},{"name":"event_time","type":"TEXT","description":"UTC timestamp of the event (ISO 8601)."},{"name":"event_name","type":"TEXT","description":"Event type: login, page_view, purchase."},{"name":"country","type":"TEXT","description":"ISO 3166-1 alpha-2 country code of the user."},{"name":"plan","type":"TEXT","description":"Subscription plan at the time of the event: free, pro, team."}]}
+⟨pipe:c1⟩
+  ← ["general","analytics","product","random"]
+⟨pipe:c2⟩
+  ── turn 2: in=5567 out=116 stop=tool_use
+  → db__run_query {"sql":"SELECT MIN(event_time), MAX(event_time), MIN(signup_date), MAX(signup_date), COUNT(*), COUNT(DISTINCT usr_id) FROM users_data"}
+  ← ERROR Error: no such column: usr_id
+To retry with changed arguments, send only the change: pipe__patch {"call":"c3","edits":[{"find":"…","replace":"…"}]}
+⟨pipe:c3⟩
+  ── turn 3: in=5768 out=88 stop=tool_use
+  → db__run_query {"sql":"SELECT * FROM users_data LIMIT 3"}
+  ← [{"event_id":1,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-02T19:33:10Z","event_name":"purchase","country":"GB","plan":"pro"},{"event_id":2,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-01T17:56:42Z","event_name":"page_view","country":"GB","plan":"pro"},{"event_id":3,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-17T05:56:48Z","event_name":"page_view","country":"GB","plan":"pro"}]
+⟨pipe:c4⟩
+  ── turn 4: in=6092 out=117 stop=tool_use
+  AI: The column is actually `user_id` (the metadata says `usr_id`).
+  → pipe__patch {"call":"c3","edits":[{"find":"usr_id","replace":"user_id"}]}
+  ← [{"MIN(event_time)":"2025-10-01T14:04:25Z","MAX(event_time)":"2026-11-11T23:25:40Z","MIN(signup_date)":"2025-10-01","MAX(signup_date)":"2026-11-04","COUNT(*)":24943,"COUNT(DISTINCT user_id)":1500}]
+⟨pipe:c5⟩
+  ── turn 5: in=6349 out=636 stop=tool_use
+  → db__run_query {"sql":"SELECT substr(signup_date,1,7) m, COUNT(DISTINCT user_id) users, SUM(event_time < signup_date) ev_before_signup, COUNT(DISTINCT signup_date||'-'||user_id) - COUNT(DISTINCT user_id) multi_signup FROM users_data GROUP BY m ORDER BY m"}
+  ← [{"m":"2025-10","users":118,"ev_before_signup":0,"multi_signup":0},{"m":"2025-11","users":114,"ev_before_signup":0,"multi_signup":0},{"m":"2025-12","users":112,"ev_before_signup":0,"multi_signup":0},{"m":"2026-01","users":120,"ev_before_signup":0,"multi_signup":0},{"m":"2026-02","users":96,"ev_before_signup":0,"multi_signup":0},{"m":"2026-03","users":126,"ev_before_signup":0,"multi_signup":0},{"m":"2026-04","users":104,"ev_before_signup":0,"multi_signup":0},{"m":"2026-05","users":125,"ev_before_signup":0,"multi_signup":0},{"m":"2026-06","users":104,"ev_before_signup":0,"multi_signup":0},{"m":"2026-07","users":121,"ev_before_signup":0,"multi_signup":0},{"m":"2026-08","users":118,"ev_before_signup":0,"multi_signup":0},{"m":"2026-09","users":115,"ev_before_signup":0,"multi_signup":0},{"m":"2026-10","users":113,"ev_before_signup":0,"multi_signup":0},{"m":"2026-11","users":14,"ev_before_signup":0,"multi_signup":0}]
+⟨pipe:c6⟩
+  ── turn 6: in=7481 out=577 stop=tool_use
+  → db__run_query {"sql":"WITH u AS (\n  SELECT user_id, MIN(signup_date) sd,\n    MAX(julianday(substr(event_time,1,10)) - julianday(signup_date)) max_day\n  FROM users_data GROUP BY user_id\n)\nSELECT COALESCE(substr(sd,1,7),'Q3 2026 total') AS cohort, COUNT(*) AS users,\n  ROUND(100.0*SUM(max_day>=1)/COUNT(*),1) AS d1_pct,\n  ROUND(100.0*SUM(max_day>=7)/COUNT(*),1) AS d7_pct,\n  ROUND(100.0*SUM(max_day>=14)/COUNT(*),1) AS d14_pct,\n  ROUND(100.0*SUM(max_day>=30)/COUNT(*),1) AS d30_pct\nFROM u WHERE sd BETWEEN '2026-07-01' AND '2026-09-30'\nGROUP BY substr(sd,1,7) WITH ROLLUP"}
+  ← ERROR Error: near "WITH": syntax error
+To retry with changed arguments, send only the change: pipe__patch {"call":"c7","edits":[{"find":"…","replace":"…"}]}
+⟨pipe:c7⟩
+  ── turn 7: in=8145 out=382 stop=tool_use
+  → pipe__patch {"call":"c7","edits":[{"find":"SELECT COALESCE(substr(sd,1,7),'Q3 2026 total') AS cohort","replace":"SELECT substr(sd,1,7) AS cohort"},{"find":"GROUP BY substr(sd,1,7) WITH ROLLUP","replace":"GROUP BY substr(sd,1,7)\nUNION ALL\nSELECT 'Q3 2026 total', COUNT(*), ROUND(100.0*SUM(max_day>=1)/COUNT(*),1), ROUND(100.0*SUM(max_day>=7)/COUNT(*),1), ROUND(100.0*SUM(max_day>=14)/COUNT(*),1), ROUND(100.0*SUM(max_day>=30)/COUNT(*),1) FROM u WHERE sd BETWEEN '2026-07-01' AND '2026-09-30'"}]}
+  ← [{"cohort":"2026-07","users":121,"d1_pct":100,"d7_pct":92.6,"d14_pct":80.2,"d30_pct":62.8},{"cohort":"2026-08","users":118,"d1_pct":100,"d7_pct":84.7,"d14_pct":76.3,"d30_pct":67.8},{"cohort":"2026-09","users":115,"d1_pct":100,"d7_pct":85.2,"d14_pct":73,"d30_pct":62.6},{"cohort":"Q3 2026 total","users":354,"d1_pct":100,"d7_pct":87.6,"d14_pct":76.6,"d30_pct":64.4}]
+⟨pipe:c8⟩
+  ── turn 8: in=8781 out=144 stop=tool_use
+  → sheets__create_spreadsheet {"title":"Retention – Q3 2026 signup cohorts (users_data)"}
+  ← {"spreadsheet_id":"sh1","url":"https://sheets.example.com/sh1"}
+⟨pipe:c9⟩
+  ── turn 9: in=8977 out=250 stop=tool_use
+  → sheets__update_values {"spreadsheet_id":"sh1","start_cell":"A1","values":"{{ c8.out | [[\"Signup cohort\",\"Users\",\"D1 retention %\",\"D7 retention %\",\"D14 retention %\",\"D30 retention %\"]] + map([.cohort,.users,.d1_pct,.d7_pct,.d14_pct,.d30_pct]) + [[],[\"Definition: user counted as retained at Day N if they had any event N or more days after signup_date. Source: users_data, data through 2026-11-11.\"]] }}"}
+  ← {"updated_cells":31}
+⟨pipe:c10⟩
+  ── turn 10: in=9255 out=261 stop=tool_use
+  → chat__post_message {"channel":"analytics","text":"**Q3 2026 retention (signup cohorts Jul–Sep, 354 users)**\n• D7: **87.6%** · D14: **76.6%** · D30: **64.4%** (D1: 100%)\n• By month (D30): Jul 62.8% · Aug 67.8% · Sep 62.6%. The July cohort had the best D7 (92.6%), but August held on best by D30.\nRetained at Day N = any event N or more days after signup. Source: `users_data`, data through 2026-11-11.\nSheet: https://sheets.example.com/sh1"}
+  ← {"ok":true,"channel":"analytics","ts":"2026-11-12T12:22:39.153Z"}
+⟨pipe:c11⟩
+  ── turn 11: in=9572 out=520 stop=end_turn
+  AI: I calculated retention for users who signed up last quarter, put the results in a new spreadsheet and posted a summary with the link to #analytics.
+
+The data runs through 2026-11-11, so I took "last quarter" to mean the last full one: Q3 2026 (July–September), 354 users. I counted a user as kept at Day N if they did anything in the product N or more days after signing up.
+
+| Signup month | Users | Day 7 | Day 14 | Day 30 |
+|---|---|---|---|---|
+| Jul 2026 | 121 | 92.6% | 80.2% | 62.8% |
+| Aug 2026 | 118 | 84.7% | 76.3% | 67.8% |
+| Sep 2026 | 115 | 85.2% | 73.0% | 62.6% |
+| **Q3 total** | **354** | **87.6%** | **76.6%** | **64.4%** |
+
+- **Day-1 retention shows as 100% in every month.** That's because every Q3 user was active at least once after their signup day. So it doesn't tell you much. If you want a stricter "came back the next day" number, I can calculate retention for exact days or weeks instead.
+- **There's no Day-60 figure.** Users who signed up in late September haven't been around for 60 days yet, so the data can't show it for all of Q3.
+- **Column name mismatch:** the table's description lists the user column as `usr_id`, but it's actually called `user_id`. Someone may want to fix the description.
+
+Spreadsheet: https://sheets.example.com/sh1
+
+== done: 11 turns, 11 tool calls, in=81065 out=3181
+
+== sheets.json
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "Retention – Q3 2026 signup cohorts (users_data)",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "D1 retention %",
+      "D1": "D7 retention %",
+      "E1": "D14 retention %",
+      "F1": "D30 retention %",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": 100,
+      "D2": 92.6,
+      "E2": 80.2,
+      "F2": 62.8,
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": 100,
+      "D3": 84.7,
+      "E3": 76.3,
+      "F3": 67.8,
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": 100,
+      "D4": 85.2,
+      "E4": 73,
+      "F4": 62.6,
+      "A5": "Q3 2026 total",
+      "B5": 354,
+      "C5": 100,
+      "D5": 87.6,
+      "E5": 76.6,
+      "F5": 64.4,
+      "A7": "Definition: user counted as retained at Day N if they had any event N or more days after signup_date. Source: users_data, data through 2026-11-11."
+    }
+  }
+}
+
+== chat.json
+[
+  {
+    "channel": "analytics",
+    "text": "**Q3 2026 retention (signup cohorts Jul–Sep, 354 users)**\n• D7: **87.6%** · D14: **76.6%** · D30: **64.4%** (D1: 100%)\n• By month (D30): Jul 62.8% · Aug 67.8% · Sep 62.6%. The July cohort had the best D7 (92.6%), but August held on best by D30.\nRetained at Day N = any event N or more days after signup. Source: `users_data`, data through 2026-11-11.\nSheet: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T12:22:39.153Z"
+  }
+]

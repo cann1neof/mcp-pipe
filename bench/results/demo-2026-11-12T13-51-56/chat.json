@@ -1,0 +1,7 @@
+[
+  {
+    "channel": "analytics",
+    "text": "**Retention – Q3 2026 signup cohorts** (Jul 1 – Sep 30, 354 new users)\n\n• **D1:** 33.1%\n• **D7** (active days 7–13): 65.0%\n• **D30** (active days 30–36): 48.6%\n\nBy month (D1 / D7 / D30):\n• Jul: 31.4% / 67.8% / 48.8%\n• Aug: 30.5% / 65.3% / 51.7%\n• Sep: 37.4% / 61.7% / 45.2%\n\nSeptember had the best D1 but the weakest D7 and D30.\n\"Retained\" means the user had any event (login, page_view or purchase) in that window. Source: `users_data`, data through 2026-11-11.\nSheet: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T13:52:32.660Z"
+  }
+]

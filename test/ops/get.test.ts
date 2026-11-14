@@ -8,7 +8,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await h.close(); });
 
-const handleOf = (r: any) => texts(r).at(-1)!.slice(6, -1);
+const handleOf = (r: any) => texts(r).at(-1)!.match(/\{\{ (c\d+)\.out/)![1]!;
 
 describe('pipe__get', () => {
   it('gets out paths and in args', async () => {

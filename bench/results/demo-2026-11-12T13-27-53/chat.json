@@ -1,0 +1,7 @@
+[
+  {
+    "channel": "analytics",
+    "text": "**Q3 2026 retention (signup cohorts Jul–Sep)** 📊\n• 354 new users in Q3\n• **Month-1 retention: 78.5%**, rising every month: Jul 75.2% → Aug 78.8% → Sep 81.7%\n• Month-2: 47.3% (Jul+Aug cohorts; Aug was strongest at 54.2%)\n• Month-3: 33.1% (Jul cohort, the only one with a complete M3)\nA user counts as retained if they had any event in the n-th calendar month after signup. Data runs to Nov 11, so the Nov-based numbers (Aug M3, Sep M2) are partial and marked in the sheet.\nFull table: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T13:28:28.499Z"
+  }
+]

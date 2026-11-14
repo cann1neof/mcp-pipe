@@ -1,0 +1,143 @@
+prompt: count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics
+model: claude-opus-5-5
+  system: Every tool result from this server ends with a handle like ⟨pipe:c3⟩ that refers to the stored call (its arguments and its result). Any argument of any tool may be a reference "{{ c3.out.path | jq }}" to a stored value, so data can move between tools without being copied. To repeat a call with a change (after an error, or to adjust it), use pipe__patch and send only the change instead of the whole call. pipe__get reads a stored value or part of it; pipe__transform reshapes one with jq; pipe__map calls a tool once per item of a stored list. For work with several steps: look at the inputs with single calls first, then write the remaining steps as one plan and execute it with pipe__run (tool calls, jq steps, per-item calls and pauses for judgement) instead of calling the tools one by one. Working plans can be saved as recipes (pipe__save) and run again by name.
+  tools: chat__list_channels, chat__post_message, db__run_query, db__get_table_description, sheets__create_spreadsheet, sheets__update_values, sheets__get_values, pipe__get, pipe__patch, pipe__transform, pipe__map, pipe__run, pipe__define, pipe__resume, pipe__save, pipe__recipes
+  ── turn 1: in=5078 out=90 stop=tool_use
+  AI: Let me look at the table first.
+  → db__get_table_description {"table":"users_data"}
+  → chat__list_channels {}
+  ← {"table":"users_data","description":"Product analytics events. One row per user event.","columns":[{"name":"event_id","type":"INTEGER","description":"Unique identifier of the event."},{"name":"usr_id","type":"INTEGER","description":"Identifier of the user who performed the event."},{"name":"signup_date","type":"TEXT","description":"Date the user created their account (YYYY-MM-DD)."},{"name":"event_time","type":"TEXT","description":"UTC timestamp of the event (ISO 8601)."},{"name":"event_name","type":"TEXT","description":"Event type: login, page_view, purchase."},{"name":"country","type":"TEXT","description":"ISO 3166-1 alpha-2 country code of the user."},{"name":"plan","type":"TEXT","description":"Subscription plan at the time of the event: free, pro, team."}]}
+⟨pipe:c1⟩
+  ← ["general","analytics","product","random"]
+⟨pipe:c2⟩
+  ── turn 2: in=5567 out=116 stop=tool_use
+  → db__run_query {"sql":"SELECT MIN(event_time), MAX(event_time), MIN(signup_date), MAX(signup_date), COUNT(*), COUNT(DISTINCT usr_id) FROM users_data"}
+  ← ERROR Error: no such column: usr_id
+⟨pipe:c3⟩
+  ── turn 3: in=5718 out=89 stop=tool_use
+  → db__run_query {"sql":"SELECT * FROM users_data LIMIT 3"}
+  ← [{"event_id":1,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-02T19:33:10Z","event_name":"purchase","country":"GB","plan":"pro"},{"event_id":2,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-01T17:56:42Z","event_name":"page_view","country":"GB","plan":"pro"},{"event_id":3,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-17T05:56:48Z","event_name":"page_view","country":"GB","plan":"pro"}]
+⟨pipe:c4⟩
+  ── turn 4: in=6043 out=127 stop=tool_use
+  AI: The column is actually `user_id` (the metadata says `usr_id`). Retrying with the correct name.
+  → pipe__patch {"call":"c3","edits":[{"find":"usr_id","replace":"user_id"}]}
+  ← [{"MIN(event_time)":"2025-10-01T14:04:25Z","MAX(event_time)":"2026-11-11T23:25:40Z","MIN(signup_date)":"2025-10-01","MAX(signup_date)":"2026-11-04","COUNT(*)":24943,"COUNT(DISTINCT user_id)":1500}]
+⟨pipe:c5⟩
+  ── turn 5: in=6310 out=871 stop=tool_use
+  → db__run_query {"sql":"WITH u AS (SELECT user_id, MIN(signup_date) sd FROM users_data GROUP BY user_id),\na AS (SELECT DISTINCT user_id, substr(event_time,1,7) m FROM users_data),\nc AS (SELECT user_id, substr(sd,1,7) cm FROM u WHERE sd BETWEEN '2026-07-01' AND '2026-09-30')\nSELECT c.cm cohort, COUNT(DISTINCT c.user_id) users,\n COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', c.cm||'-01','+1 month') THEN a.user_id END) m1,\n COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', c.cm||'-01','+2 month') THEN a.user_id END) m2,\n COUNT(DISTINCT CASE WHEN a.m = strftime('%Y-%m', c.cm||'-01','+3 month') THEN a.user_id END) m3\nFROM c LEFT JOIN a ON a.user_id=c.user_id GROUP BY c.cm ORDER BY c.cm"}
+  ← [{"cohort":"2026-07","users":121,"m1":91,"m2":49,"m3":40},{"cohort":"2026-08","users":118,"m1":93,"m2":64,"m3":36},{"cohort":"2026-09","users":115,"m1":94,"m2":48,"m3":0}]
+⟨pipe:c6⟩
+  ── turn 6: in=7303 out=337 stop=tool_use
+  → sheets__create_spreadsheet {"title":"Retention by Signup Cohort – Q3 2026"}
+  ← {"spreadsheet_id":"sh1","url":"https://sheets.example.com/sh1"}
+⟨pipe:c7⟩
+  ── turn 7: in=7692 out=448 stop=tool_use
+  → sheets__update_values {"spreadsheet_id":"sh1","start_cell":"A1","values":"[[\"Signup cohort\",\"Users\",\"M1 retained\",\"M1 %\",\"M2 retained\",\"M2 %\",\"M3 retained\",\"M3 %\",\"Notes\"],[\"2026-07\",121,91,\"75.2%\",49,\"40.5%\",40,\"33.1%\",\"Complete\"],[\"2026-08\",118,93,\"78.8%\",64,\"54.2%\",36,\"30.5%\",\"M3 = Nov 2026, partial (data to Nov 11)\"],[\"2026-09\",115,94,\"81.7%\",48,\"41.7%\",null,\"n/a\",\"M2 = Nov 2026, partial; M3 not yet available\"],[\"Q3 2026 total\",354,278,\"78.5%\",113,\"47.3%\",40,\"33.1%\",\"M2 uses Jul+Aug only; M3 uses Jul only (complete months)\"],[],[\"Method: cohort = users by signup month (Jul–Sep 2026). Mn retained = user had any event (login/page_view/purchase) in the n-th calendar month after signup. Source: users_data, data through 2026-11-11.\"]]"}
+  ← ERROR MCP error -32602: Input validation error: Invalid arguments for tool update_values: Invalid input: expected array, received string at values
+⟨pipe:c8⟩
+  ── turn 8: in=8206 out=510 stop=tool_use
+  → sheets__update_values {"spreadsheet_id":"sh1","start_cell":"A1","values":"[[\"Signup cohort\",\"Users\",\"M1 retained\",\"M1 %\",\"M2 retained\",\"M2 %\",\"M3 retained\",\"M3 %\",\"Notes\"],[\"2026-07\",121,91,\"75.2%\",49,\"40.5%\",40,\"33.1%\",\"Complete\"],[\"2026-08\",118,93,\"78.8%\",64,\"54.2%\",36,\"30.5%\",\"M3 = Nov 2026, partial (data to Nov 11)\"],[\"2026-09\",115,94,\"81.7%\",48,\"41.7%\",\"\",\"n/a\",\"M2 = Nov 2026, partial; M3 not yet available\"],[\"Q3 2026 total\",354,278,\"78.5%\",113,\"47.3%\",40,\"33.1%\",\"M2 uses Jul+Aug only; M3 uses Jul only (complete months)\"],[\"\"],[\"Method: cohort = users by signup month (Jul-Sep 2026). Mn retained = user had any event (login/page_view/purchase) in the n-th calendar month after signup. Source: users_data, data through 2026-11-11.\"]]"}
+  ← ERROR MCP error -32602: Input validation error: Invalid arguments for tool update_values: Invalid input: expected array, received string at values
+⟨pipe:c9⟩
+  ── turn 9: in=8782 out=446 stop=tool_use
+  → pipe__transform {"from":"c6.out","jq":"[[\"Signup cohort\",\"Users\",\"M1 retained\",\"M1 %\",\"M2 retained\",\"M2 %\",\"M3 retained\",\"M3 %\",\"Notes\"],[\"2026-07\",121,91,\"75.2%\",49,\"40.5%\",40,\"33.1%\",\"Complete\"],[\"2026-08\",118,93,\"78.8%\",64,\"54.2%\",36,\"30.5%\",\"M3 = Nov 2026, partial (data to Nov 11)\"],[\"2026-09\",115,94,\"81.7%\",48,\"41.7%\",\"\",\"n/a\",\"M2 = Nov 2026, partial; M3 not yet available\"],[\"Q3 2026 total\",354,278,\"78.5%\",113,\"47.3%\",40,\"33.1%\",\"M2 uses Jul+Aug only; M3 uses Jul only (complete months)\"],[\"\"],[\"Method: cohort = users by signup month (Jul-Sep 2026). Mn retained = user had any event (login/page_view/purchase) in the n-th calendar month after signup. Source: users_data, data through 2026-11-11.\"]]"}
+  ← [["Signup cohort","Users","M1 retained","M1 %","M2 retained","M2 %","M3 retained","M3 %","Notes"],["2026-07",121,91,"75.2%",49,"40.5%",40,"33.1%","Complete"],["2026-08",118,93,"78.8%",64,"54.2%",36,"30.5%","M3 = Nov 2026, partial (data to Nov 11)"],["2026-09",115,94,"81.7%",48,"41.7%","","n/a","M2 = Nov 2026, partial; M3 not yet available"],["Q3 2026 total",354,278,"78.5%",113,"47.3%",40,"33.1%","M2 uses Jul+Aug only; M3 uses Jul only (complete months)"],[""],["Method: cohort = users by signup month (Jul-Sep 2026). Mn retained = user had any event (login/page_view/purchase) in the n-th calendar month after signup. Source: users_data, data through 2026-11-11."]]
+⟨pipe:c10⟩
+  ── turn 10: in=9588 out=114 stop=tool_use
+  → sheets__update_values {"spreadsheet_id":"sh1","start_cell":"A1","values":"{{ c10.out }}"}
+  ← {"updated_cells":47}
+⟨pipe:c11⟩
+  ── turn 11: in=9730 out=321 stop=tool_use
+  → chat__post_message {"channel":"analytics","text":"**Q3 2026 retention (signup cohorts Jul–Sep)** 📊\n• 354 new users in Q3\n• **Month-1 retention: 78.5%**, rising every month: Jul 75.2% → Aug 78.8% → Sep 81.7%\n• Month-2: 47.3% (Jul+Aug cohorts; Aug was strongest at 54.2%)\n• Month-3: 33.1% (Jul cohort, the only one with a complete M3)\nA user counts as retained if they had any event in the n-th calendar month after signup. Data runs to Nov 11, so the Nov-based numbers (Aug M3, Sep M2) are partial and marked in the sheet.\nFull table: https://sheets.example.com/sh1"}
+  ← {"ok":true,"channel":"analytics","ts":"2026-11-12T13:28:28.499Z"}
+⟨pipe:c12⟩
+  ── turn 12: in=10107 out=524 stop=end_turn
+  AI: I calculated retention for users who signed up in Q3 2026 (July–September), put the table in a new spreadsheet and posted a summary to #analytics. I took "last quarter" to mean Q3 because the data runs only to November 11, so Q4 isn't finished yet.
+
+A user counts as retained in month 1, 2 or 3 if they had any event (login, page view or purchase) in that calendar month after the month they signed up.
+
+| Signup month | Users | Month 1 | Month 2 | Month 3 |
+|---|---|---|---|---|
+| Jul 2026 | 121 | 75.2% | 40.5% | 33.1% |
+| Aug 2026 | 118 | 78.8% | 54.2% | 30.5%* |
+| Sep 2026 | 115 | 81.7% | 41.7%* | – |
+| **Q3 total** | **354** | **78.5%** | **47.3%** | **33.1%** |
+
+\* November isn't over yet, so these figures are incomplete and will likely go up. Sep month 3 (December) has no data yet.
+
+- **Month 1:** retention rose every month, from 75.2% in July to 81.7% in September.
+- **Month 2:** the August signups kept the most users, at 54.2%. The Q3 total uses only July and August, which have complete data.
+- **Month 3:** the Q3 total comes from July signups only, because they're the only group with a full third month.
+
+The table's description lists the user column as `usr_id`, but it's actually `user_id`. It's worth updating the description.
+
+Spreadsheet: https://sheets.example.com/sh1
+
+== done: 12 turns, 12 tool calls, in=90124 out=3993
+
+== sheets.json
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "Retention by Signup Cohort – Q3 2026",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "M1 retained",
+      "D1": "M1 %",
+      "E1": "M2 retained",
+      "F1": "M2 %",
+      "G1": "M3 retained",
+      "H1": "M3 %",
+      "I1": "Notes",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": 91,
+      "D2": "75.2%",
+      "E2": 49,
+      "F2": "40.5%",
+      "G2": 40,
+      "H2": "33.1%",
+      "I2": "Complete",
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": 93,
+      "D3": "78.8%",
+      "E3": 64,
+      "F3": "54.2%",
+      "G3": 36,
+      "H3": "30.5%",
+      "I3": "M3 = Nov 2026, partial (data to Nov 11)",
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": 94,
+      "D4": "81.7%",
+      "E4": 48,
+      "F4": "41.7%",
+      "G4": "",
+      "H4": "n/a",
+      "I4": "M2 = Nov 2026, partial; M3 not yet available",
+      "A5": "Q3 2026 total",
+      "B5": 354,
+      "C5": 278,
+      "D5": "78.5%",
+      "E5": 113,
+      "F5": "47.3%",
+      "G5": 40,
+      "H5": "33.1%",
+      "I5": "M2 uses Jul+Aug only; M3 uses Jul only (complete months)",
+      "A6": "",
+      "A7": "Method: cohort = users by signup month (Jul-Sep 2026). Mn retained = user had any event (login/page_view/purchase) in the n-th calendar month after signup. Source: users_data, data through 2026-11-11."
+    }
+  }
+}
+
+== chat.json
+[
+  {
+    "channel": "analytics",
+    "text": "**Q3 2026 retention (signup cohorts Jul–Sep)** 📊\n• 354 new users in Q3\n• **Month-1 retention: 78.5%**, rising every month: Jul 75.2% → Aug 78.8% → Sep 81.7%\n• Month-2: 47.3% (Jul+Aug cohorts; Aug was strongest at 54.2%)\n• Month-3: 33.1% (Jul cohort, the only one with a complete M3)\nA user counts as retained if they had any event in the n-th calendar month after signup. Data runs to Nov 11, so the Nov-based numbers (Aug M3, Sep M2) are partial and marked in the sheet.\nFull table: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T13:28:28.499Z"
+  }
+]

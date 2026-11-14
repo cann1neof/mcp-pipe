@@ -1,7 +1,7 @@
 {
   "name": "mcp-pipe",
   "version": "1.0.0",
-  "description": "Copy/paste for AI tool calls: a self-hosted MCP proxy with handles, patch-and-rerun, jq transforms and saved recipes",
+  "description": "Cross-MCP memory for AI tool calls: every result is saved, passed to other tools by reference, reshaped with jq, patched and re-run, or chained into pipes",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -9,8 +9,7 @@
   },
   "files": [
     "dist",
-    "recipes",
-    "templates",
+    "examples",
     "LICENSE",
     "README.md"
   ],
@@ -37,7 +36,8 @@
     "bench": "tsx bench/run.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "demo": "tsx bench/demo.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

@@ -5,7 +5,7 @@ let h: Awaited<ReturnType<typeof startHarness>>;
 beforeAll(async () => { h = await startHarness(); });
 afterAll(async () => { await h.close(); });
 
-const handleOf = (r: any) => texts(r).at(-1)!.slice(6, -1);
+const handleOf = (r: any) => texts(r).at(-1)!.match(/\{\{ (c\d+)\.out/)![1]!;
 
 describe('pipe__patch', () => {
   it('find/replace in string leaves, new id with parent', async () => {

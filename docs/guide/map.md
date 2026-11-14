@@ -16,9 +16,9 @@
 - Reply: `{ ok, failed: [{index, error}], handles, outputs }` — counts and handles, never the outputs themselves. `outputs` is the handle of the list of all outputs, in item order.
 - An item that fails does not stop the others.
 
-## Confirm for tools that can change data
+## Optional confirm for tools that can change data
 
-A tool without `readOnlyHint: true` counts as writing. For those, the first reply is a plan and a one-time token:
+Off by default: maps run directly. With `confirmWrites: true` in the config, a map over a tool without `readOnlyHint: true` (which counts as writing) first replies with a plan and a one-time token:
 
 ```json
 { "status": "needs_confirm", "plan": [{ "tool": "sheets__append_row", "count": 120, "writes": true }], "confirm": "ok-3f9a…" }

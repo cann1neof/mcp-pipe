@@ -28,6 +28,6 @@ export async function startHarness(
 
 export const texts = (r: any): string[] => r.content.filter((c: any) => c.type === 'text').map((c: any) => c.text);
 /** Handle id from the marker block at the end of a result. */
-export const handleOf = (r: any): string => /⟨pipe:(c\d+)⟩/.exec(texts(r).join('\n'))![1]!;
+export const handleOf = (r: any): string => /saved as \{\{ (c\d+)\.out \}\}/.exec(texts(r).join('\n'))![1]!;
 /** Parsed JSON of the first text block. */
 export const body = (r: any): any => JSON.parse(texts(r)[0]!);

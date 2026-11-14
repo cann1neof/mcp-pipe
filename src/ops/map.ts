@@ -80,8 +80,7 @@ export const mapOp: Op = {
       'Call one tool once per item of a stored list, in a single request. "over" is a handle of a list ' +
       '(e.g. "c3.out.rows", or "{{ c3.out | map(.id) }}"). In "args", "{{ item }}" is the current item and ' +
       '"{{ item.<path> }}" part of it. Returns how many calls succeeded, the failures, and a handle per call; ' +
-      'the outputs are stored as a list under the map\'s own handle. Tools that can change data need a confirm: ' +
-      'the first reply is the plan and a token, then repeat the call with "confirm". "dry_run" returns the plan only.',
+      'the outputs are stored as a list under the map\'s own handle. "dry_run" returns the plan only.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -90,7 +89,7 @@ export const mapOp: Op = {
         args: { type: 'object', description: 'arguments for each call; may use {{ item }} refs' },
         concurrency: { type: 'number', description: 'parallel calls (default 4)' },
         dry_run: { type: 'boolean' },
-        confirm: { type: 'string', description: 'token from a needs_confirm reply' },
+        confirm: { type: 'string', description: 'only if a reply asked for it: the token from that needs_confirm reply' },
       },
       required: ['tool', 'over', 'args'],
     },
@@ -108,7 +107,7 @@ export const mapOp: Op = {
     if (list.hiddenFrom?.length) core.checkSinks(list.hiddenFrom, target.server);
     const plan: PlanStep[] = [{ tool, count: list.value.length, writes: isWrite(target.def), sampleArgs: callArgs }];
     if (args.dry_run === true) return json({ status: 'dry_run', plan });
-    const needs = gate(core.confirms, plan, typeof args.confirm === 'string' ? args.confirm : undefined);
+    const needs = gate(core.confirms, plan, typeof args.confirm === 'string' ? args.confirm : undefined, core.cfg.confirmWrites === true);
     if (needs) return json(needs);
 
     const concurrency = typeof args.concurrency === 'number' ? Math.max(1, Math.min(32, Math.floor(args.concurrency))) : 4;

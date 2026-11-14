@@ -1,0 +1,7 @@
+[
+  {
+    "channel": "analytics",
+    "text": "**Q3 2026 retention (signup cohorts Jul–Sep, 354 users)**\n• D7: **87.6%** · D14: **76.6%** · D30: **64.4%** (D1: 100%)\n• By month (D30): Jul 62.8% · Aug 67.8% · Sep 62.6%. The July cohort had the best D7 (92.6%), but August held on best by D30.\nRetained at Day N = any event N or more days after signup. Source: `users_data`, data through 2026-11-11.\nSheet: https://sheets.example.com/sh1",
+    "ts": "2026-11-12T12:22:39.153Z"
+  }
+]

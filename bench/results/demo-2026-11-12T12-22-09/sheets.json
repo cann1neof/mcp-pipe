@@ -1,0 +1,40 @@
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "Retention – Q3 2026 signup cohorts (users_data)",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "D1 retention %",
+      "D1": "D7 retention %",
+      "E1": "D14 retention %",
+      "F1": "D30 retention %",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": 100,
+      "D2": 92.6,
+      "E2": 80.2,
+      "F2": 62.8,
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": 100,
+      "D3": 84.7,
+      "E3": 76.3,
+      "F3": 67.8,
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": 100,
+      "D4": 85.2,
+      "E4": 73,
+      "F4": 62.6,
+      "A5": "Q3 2026 total",
+      "B5": 354,
+      "C5": 100,
+      "D5": 87.6,
+      "E5": 76.6,
+      "F5": 64.4,
+      "A7": "Definition: user counted as retained at Day N if they had any event N or more days after signup_date. Source: users_data, data through 2026-11-11."
+    }
+  }
+}

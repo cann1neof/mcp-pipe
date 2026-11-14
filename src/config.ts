@@ -34,7 +34,7 @@ const configSchema = z.object({
     memoryOnly: z.boolean().optional(),
   }).optional(),
   peek: z.object({ maxBytes: z.number().int().min(0).optional() }).optional(),
-  recipesDir: z.string().optional(),
+  confirmWrites: z.boolean().optional(),
 });
 
 export const defaultDir = () => path.join(os.homedir(), '.mcp-pipe');
@@ -103,12 +103,11 @@ export function parseConfig(raw: unknown, source = 'config', secrets: SecretSour
     const expanded = expandSecrets(conn, secrets, `${source}: server "${name}"`) as Record<string, unknown>;
     servers[name] = { ...expanded, ...(pipe ? { pipe } : {}) } as PipeConfig['mcpServers'][string];
   }
-  const { store, recipesDir, ...rest } = top.data;
+  const { store, ...rest } = top.data;
   return {
     ...rest,
     mcpServers: servers,
     ...(store ? { store: { ...store, ...(store.path ? { path: expandHome(store.path) } : {}) } } : {}),
-    ...(recipesDir ? { recipesDir: expandHome(recipesDir) } : {}),
   };
 }
 
