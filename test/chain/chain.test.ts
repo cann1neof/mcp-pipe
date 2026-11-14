@@ -6,7 +6,7 @@ import { parseChain } from '../../src/chain/schema.js';
 import { DownstreamPool } from '../../src/downstream.js';
 import { SqliteStore } from '../../src/store/sqlite.js';
 import { MemoryStore } from '../../src/store/memory.js';
-import { startHarness, texts, body } from '../harness.js';
+import { startHarness, texts, body, handleOf } from '../harness.js';
 import { fixtureServer } from '../helpers.js';
 
 const TRANSLATE = `
@@ -86,6 +86,15 @@ describe('engine', () => {
     const p = body(await h.call('pipe__patch', { run: b.run, step: 'q', edits: [{ path: 'call', set: 'echo__lookup' }, { path: 'args', set: { key: 'k' } }] }));
     expect(p.status).toBe('done');
     expect(body(await h.call('echo__stats')).calls.rows).toBe(rowsBefore);
+  });
+  it('jq steps read saved calls as $cN; ref expressions use step names', async () => {
+    const c = handleOf(await h.call('echo__rows', { n: 3 }));
+    const r = body(await h.call('pipe__run', { chain: { steps: [
+      { id: 'ids', jq: `$${c} | map(.id)` },
+      { id: 'j', call: 'echo__json', args: { value: { n: '{{ ids | length }}' } } },
+      { id: 'msg', call: 'echo__echo', args: { text: `{{ "ids: " + (ids | map(tostring) | join(",")) + " n=" + (j.n | tostring) }}` } },
+    ] } }));
+    expect(r).toMatchObject({ status: 'done', result: 'ids: 1,2,3 n=3' });
   });
   it('write steps run directly by default', async () => {
     const w = { steps: [{ id: 'a', call: 'echo__rows', args: { n: 1 } }, { id: 'b', call: 'echo__echo', args: { text: 'hi' } }] };
@@ -184,7 +193,7 @@ describe('ai steps', () => {
     const p = body(await h.call('pipe__run', { chain: c }));
     expect(JSON.stringify(p)).not.toContain('row-1');
     expect(p.chunks).toHaveLength(3);
-    expect(p.next).toMatch(/Spawn a subagent/);
+    expect(p).toMatchObject({ status: 'paused', by: 'subagent' });
     const chunk = async (i: number) => JSON.parse(texts(await h.call('pipe__get', { handle: p.chunks[i].inputHandle }))[0]!) as string[];
     const up = async (i: number) => (await chunk(i)).map((s) => s.toUpperCase());
     expect(body(await h.call('pipe__resume', { run: p.run, step: 'up', chunk: 2, output: await up(2) })).openChunks).toEqual([0, 1]);

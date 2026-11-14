@@ -179,3 +179,19 @@ describe('coerceJsonStrings', () => {
     expect(coerceJsonStrings(args, undefined)).toBe(args);
   });
 });
+
+describe('install-skill', () => {
+  it('copies the usage skill into <dir>/mcp-pipe/SKILL.md', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { installSkill } = await import('../../src/skill.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipe-skill-'));
+    const log = console.log; console.log = () => {};
+    try {
+      const file = installSkill(dir);
+      expect(file).toBe(path.join(dir, 'mcp-pipe', 'SKILL.md'));
+      expect(fs.readFileSync(file, 'utf8')).toMatch(/^---\nname: mcp-pipe\n/);
+    } finally { console.log = log; }
+  });
+});

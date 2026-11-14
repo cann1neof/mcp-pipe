@@ -66,7 +66,7 @@ Run a plan: exactly one of `chain`, `run`.
 | `confirm` | string? | token (only with `confirmWrites`) |
 | `force` | boolean? | repeat map items that already succeeded |
 
-Returns one of `done` (`outputs`, `result`), `failed` (`step`, `error`, `next`), `paused` (see [AI steps](../guide/ai-steps)), `needs_confirm`, `dry_run`.
+Returns one of `done` (`outputs`, `result`), `failed` (`step`, `error`, `outputs`), `paused` (see [AI steps](../guide/ai-steps)), `needs_confirm`, `dry_run`.
 
 ## pipe__resume
 

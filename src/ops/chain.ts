@@ -13,7 +13,7 @@ export const engineFor = (core: PipeCore) => {
 const CHAIN_FORMAT =
   'A chain is {params?: {name: type}, steps: [...]}; each step has an "id" and one of: ' +
   '{call: "<tool>", args: {...}} calls a tool; ' +
-  '{jq: "<program>"} computes a value, with params and earlier step outputs as jq variables ($id); ' +
+  '{jq: "<program>"} computes a value, with params, earlier step outputs and saved calls as jq variables ($id, $c7); ' +
   '{map: "<tool>", over: "<step id or handle of a list>", args: {...}} calls a tool once per item ("{{ item }}", "{{ item.path }}"); ' +
   '{ai: "<task>", input?: "<jq program>", by?: "session"|"subagent", batch?: n, expect?: <JSON Schema>} pauses the run for ' +
   'a step that needs judgement (done by you or a subagent), continued with pipe__resume. ' +
@@ -30,12 +30,10 @@ export const runOp: Op = {
     description:
       'Run a multi-step plan in one request: pass a new "chain" (JSON or YAML text, e.g. copied from a skill) with its "params", ' +
       'or an existing "run" id to run it again. ' +
-      'Use it as soon as you know the remaining steps — typically after a few single calls to look at the inputs — and ' +
-      'especially when one step\'s result feeds the next: the steps run back to back without a round trip to you, ' +
-      'intermediate results stay stored instead of passing through the conversation, and a failed step is fixed in place. ' +
+      'Steps run back to back in one request; every step\'s output is saved and can be referred to by later steps. ' +
       `${CHAIN_FORMAT} ` +
-      'The reply lists each step\'s output handle and the last step\'s result. A failing step stops the run; fix it with ' +
-      'pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. ' +
+      'The reply lists each step\'s output handle and the last step\'s result. A failing step stops the run; ' +
+      'pipe__patch {run, step, edits} edits that step and re-runs from it without repeating earlier ones. ' +
       '"from" re-runs from a step; "dry_run" returns the plan; "force" repeats map items that already succeeded.',
     inputSchema: {
       type: 'object',

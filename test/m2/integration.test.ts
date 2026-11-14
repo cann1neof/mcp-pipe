@@ -82,6 +82,14 @@ describe('pipe__get / pipe__transform', () => {
     expect(JSON.parse(texts(t)[0]!)).toEqual([{ k: 'row-1' }, { k: 'row-2' }, { k: 'row-3' }]);
     expect(texts(await h.call('echo__echo', { text: `{{ ${id}.out[2].k }}` }))[0]).toBe('row-3');
   });
+  it('a filter that ignores its input is refused', async () => {
+    const rows = handleOf(await h.call('echo__rows', { n: 2 }));
+    const t = await h.call('pipe__transform', { from: `${rows}.out`, jq: '[["a", 1], ["b", 2]]' });
+    expect(t.isError).toBe(true);
+    expect(texts(t)[0]).toMatch(/same output whatever its input/);
+    const ok = await h.call('pipe__transform', { from: `${rows}.out`, jq: '[["id"]] + map([.id])' });
+    expect(JSON.parse(texts(ok)[0]!)).toEqual([['id'], [1], [2]]);
+  });
   it('jq error names the input shape', async () => {
     const rows = handleOf(await h.call('echo__rows', { n: 2 }));
     const t = await h.call('pipe__transform', { from: `${rows}.out`, jq: '.foo' });

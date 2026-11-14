@@ -15,10 +15,8 @@ import { patchAnyOp, resumeOp, runOp } from './ops/chain.js';
 export { marker } from './core.js';
 
 const INSTRUCTIONS =
-  'Every tool result ends with "saved as {{ cN.out }}". Pass saved results to other tools as arguments ' +
-  '("{{ c3.out }}", "{{ c3.out.rows }}", "{{ c3.out | <jq> }}") instead of copying data; compute derived values ' +
-  '(percentages, totals, formatting) in the query or with jq over the saved result. pipe__patch repeats a call with ' +
-  'only the changed arguments. pipe__run executes several steps as one pipe (tool calls, jq, per-item calls).';
+  'mcp-pipe proxies the connected MCP servers. Every result is saved and ends with "saved as {{ cN.out }}", ' +
+  'a reference that any argument of any tool accepts. The pipe__* tools read, reshape, patch and chain saved calls.';
 
 export const OPS: Op[] = [getOp, patchAnyOp, transformOp, mapOp, runOp, resumeOp];
 

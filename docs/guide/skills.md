@@ -1,5 +1,7 @@
 # Pipes in skills
 
+The [usage skill](./install#install-the-usage-skill) teaches the AI how to use mcp-pipe in general. Task skills like the one below carry one pipe each.
+
 mcp-pipe has no recipe store. A pipe worth keeping goes into a skill, the way your harness (Claude Code, Codex, Cursor, …) already keeps reusable instructions:
 
 ````markdown
