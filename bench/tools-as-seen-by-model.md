@@ -1,10 +1,10 @@
 # What the model sees from mcp-pipe
 
-Generated from `src/proxy.ts` OPS. Downstream tools appear next to these as `<server>__<tool>`, with their own descriptions plus the ref note shown at the end.
+Generated from `src/proxy.ts`. Downstream tools appear next to these as `<server>__<tool>` with their own descriptions plus the note at the end. Usage guidance is not here: it is in [skills/mcp-pipe/SKILL.md](../skills/mcp-pipe/SKILL.md).
 
 ## Server instructions
 
-Every tool result ends with "saved as {{ cN.out }}". Pass saved results to other tools as arguments  ("{{ c3.out }}", "{{ c3.out.rows }}", "{{ c3.out | <jq> }}") instead of copying data; compute derived values  (percentages, totals, formatting) in the query or with jq over the saved result. pipe__patch repeats a call with  only the changed arguments. pipe__run executes several steps as one pipe (tool calls, jq, per-item calls). 
+mcp-pipe proxies the connected MCP servers. Every result is saved and ends with "saved as {{ cN.out }}",  a reference that any argument of any tool accepts. The pipe__* tools read, reshape, patch and chain saved calls. 
 
 ## pipe__get
 
@@ -31,7 +31,7 @@ Read the arguments or the result of an earlier tool call by its handle. Handle f
 
 ## pipe__patch
 
-Re-run an earlier tool call with modified arguments. Use it whenever a call needs to be repeated with a change — it failed, or you want a different filter, column, limit or target — instead of writing the whole call again: you send only the change, and the arguments stay exactly as they were everywhere else. The call's stored arguments are copied, the edits are applied to the copy, and the result is executed as a new call with its own handle. Edit forms: {find, replace} replaces text in string arguments (all of them, or only under "path"); {path, set} sets the value at "path". With no edits the call is re-run unchanged. To fix a step of a run instead, pass "run" (run id) and "step": the edits apply to the step definition (e.g. path "args.sql", or find/replace in its text) and the run continues from that step; earlier steps are not repeated.
+Re-run an earlier tool call with modified arguments, sending only the change. The call's stored arguments are copied, the edits are applied to the copy, and the result is executed as a new call with its own handle. Edit forms: {find, replace} replaces text in string arguments (all of them, or only under "path"); {path, set} sets the value at "path". With no edits the call is re-run unchanged. To fix a step of a run instead, pass "run" (run id) and "step": the edits apply to the step definition (e.g. path "args.sql", or find/replace in its text) and the run continues from that step; earlier steps are not repeated.
 
 ```json
 {
@@ -155,7 +155,7 @@ Call one tool once per item of a stored list, in a single request. "over" is a h
 
 ## pipe__run
 
-Run a multi-step plan in one request: pass a new "chain" (JSON or YAML text, e.g. copied from a skill) with its "params", or an existing "run" id to run it again. Use it as soon as you know the remaining steps — typically after a few single calls to look at the inputs — and especially when one step's result feeds the next: the steps run back to back without a round trip to you, intermediate results stay stored instead of passing through the conversation, and a failed step is fixed in place. A chain is {params?: {name: type}, steps: [...]}; each step has an "id" and one of: {call: "<tool>", args: {...}} calls a tool; {jq: "<program>"} computes a value, with params and earlier step outputs as jq variables ($id); {map: "<tool>", over: "<step id or handle of a list>", args: {...}} calls a tool once per item ("{{ item }}", "{{ item.path }}"); {ai: "<task>", input?: "<jq program>", by?: "session"|"subagent", batch?: n, expect?: <JSON Schema>} pauses the run for a step that needs judgement (done by you or a subagent), continued with pipe__resume. In args, "{{ name[.path] [| jq] }}" refers to a param, an earlier step's output, or any handle. The reply lists each step's output handle and the last step's result. A failing step stops the run; fix it with pipe__patch {run, step, edits}, which re-runs from that step without repeating earlier ones. "from" re-runs from a step; "dry_run" returns the plan; "force" repeats map items that already succeeded.
+Run a multi-step plan in one request: pass a new "chain" (JSON or YAML text, e.g. copied from a skill) with its "params", or an existing "run" id to run it again. Steps run back to back in one request; every step's output is saved and can be referred to by later steps. A chain is {params?: {name: type}, steps: [...]}; each step has an "id" and one of: {call: "<tool>", args: {...}} calls a tool; {jq: "<program>"} computes a value, with params, earlier step outputs and saved calls as jq variables ($id, $c7); {map: "<tool>", over: "<step id or handle of a list>", args: {...}} calls a tool once per item ("{{ item }}", "{{ item.path }}"); {ai: "<task>", input?: "<jq program>", by?: "session"|"subagent", batch?: n, expect?: <JSON Schema>} pauses the run for a step that needs judgement (done by you or a subagent), continued with pipe__resume. In args, "{{ name[.path] [| jq] }}" refers to a param, an earlier step's output, or any handle. The reply lists each step's output handle and the last step's result. A failing step stops the run; pipe__patch {run, step, edits} edits that step and re-runs from it without repeating earlier ones. "from" re-runs from a step; "dry_run" returns the plan; "force" repeats map items that already succeeded.
 
 ```json
 {

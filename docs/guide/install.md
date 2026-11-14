@@ -21,6 +21,15 @@ Restart the host. Your tools now appear as `<server>__<tool>` (e.g. `postgres__q
 
 Undo: copy the `.bak-…` file back over the host config.
 
+## Install the usage skill
+
+The MCP server only exposes tools; the skill tells the AI how to use them: pass results by reference instead of copying them, compute in SQL or jq, patch failed calls, and write multi-step work as one pipe.
+
+```bash
+npx -y mcp-pipe install-skill                 # ~/.claude/skills/mcp-pipe/SKILL.md (Claude Code)
+npx -y mcp-pipe install-skill --dir <skills dir>  # other harnesses
+```
+
 ## Add it by hand
 
 `~/.mcp-pipe/servers.json` uses the same shape as Claude Desktop's config:

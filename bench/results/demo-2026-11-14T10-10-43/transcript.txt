@@ -1,0 +1,239 @@
+prompt: count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics
+
+<skill name="skills/mcp-pipe/SKILL.md">
+---
+name: mcp-pipe
+description: How to work with tools served through mcp-pipe (tools named <server>__<tool> plus pipe__run, pipe__patch, pipe__transform, pipe__map, pipe__get, pipe__resume). Use for any task that calls these tools, especially when data from one tool goes into another, a list needs one call per item, or a call has to be fixed and repeated.
+---
+
+# Working with mcp-pipe
+
+mcp-pipe sits between you and the MCP servers. It saves every call: its arguments and its result. Each result ends with its reference, for example `saved as {{ c7.out }}`. Work with these references instead of with the data itself.
+
+## Rules
+
+1. **Never copy data from a result into another call.** Pass the reference instead. mcp-pipe fills in the value before the call:
+   - the whole result: `"{{ c7.out }}"`
+   - a part: `"{{ c7.out.rows[0].id }}"`
+   - reshaped with jq: `"{{ c7.out | map([.name, .total]) }}"`
+   - any jq expression over saved results: `"{{ [["Name", "Total"]] + (c7.out | map([.name, .total])) }}"`
+
+   A string that is exactly one reference becomes the value with its own type (array, object, number). A reference inside longer text is inserted as text.
+2. **Compute in the tools, not in your head.** Percentages, totals, rounding, formatting and joins belong in the query (SQL) or in jq over a saved result. Write the formula, not the numbers.
+3. **Fix a call by patching it, not by rewriting it.** `pipe__patch {"call": "c3", "edits": [{"find": "usr_id", "replace": "user_id"}]}` copies the saved arguments, applies the change and runs the call again. Edits are `{find, replace}` (text in string arguments) or `{path, set}` (any value).
+4. **Read only what you need.** Large results come back as a preview. Use `pipe__get {"handle": "c7.out.rows", "jq": ".[0:5]"}` or a path like `c7.out.rows[0].id` for the part you need, not the whole value.
+5. **`pipe__transform` must transform its input.** It applies jq to a saved value and saves the result under a new reference. A filter that ignores its input is refused; pass literal values directly in the tool argument instead.
+
+## Workflow
+
+1. **Look first, with single calls.** Read schemas and descriptions, take small samples (`LIMIT 3`), check date ranges and IDs. Don't trust metadata blindly: if a call fails on a name from the docs, check the real one, then patch.
+2. **Then write the rest as one pipe** and run it with `pipe__run`. Do this as soon as you know the remaining steps, especially when one step's output feeds the next. The steps run back to back without a round trip through you, and no intermediate data enters the conversation.
+3. **If a step fails, patch that step.** `pipe__patch {"run": "r1", "step": "cohorts", "edits": [...]}` edits the step and continues the run from it. Earlier steps are not repeated. Don't write a new pipe.
+4. **Report from the outputs.** The reply lists each step's reference and the last step's result. Use `pipe__get` on a step output if you need to show part of it.
+
+Single calls are fine for one-off lookups. Use a pipe once there are two or more dependent steps.
+
+## Pipe format
+
+`pipe__run {"chain": <YAML or JSON>, "params": {...}}`:
+
+```yaml
+params: { sql: string, channel: string }
+steps:
+  - id: rows                      # a tool call
+    call: db__run_query
+    args: { sql: "{{ sql }}" }
+  - id: table                     # jq: params and earlier steps are $variables
+    jq: '[["Country", "Revenue"]] + ($rows | map([.country, .revenue]))'
+  - id: sheet
+    call: sheets__create_spreadsheet
+    args: { title: "Revenue" }
+  - id: write                     # earlier steps as references in arguments
+    call: sheets__update_values
+    args: { spreadsheet_id: "{{ sheet.spreadsheet_id }}", start_cell: "A1", values: "{{ table }}" }
+  - id: notify                    # one call per item of a list
+    map: chat__post_message
+    over: rows
+    args: { channel: "{{ channel }}", text: "{{ item.country }}: {{ item.revenue }}" }
+```
+
+- In `args`, `{{ name }}` refers to a param, an earlier step id, or any saved call (`c7.out`). In `jq`, they are `$name`.
+- `map` steps call a tool once per item: `{{ item }}`, `{{ item.path }}`. Items that already succeeded are skipped when the step runs again.
+- `dry_run: true` checks the pipe and returns the plan without running it. `from: "<step>"` runs again from a step.
+
+### Steps that need judgement
+
+An `ai` step pauses the run for work only a model can do (translate, classify, summarise):
+
+```yaml
+  - id: tr
+    ai: "Translate each item to Hebrew. Return a JSON array, same order, same length."
+    input: '$boxes | map(.text)'
+    by: subagent                  # or session
+    batch: 20
+    expect: { type: array, items: { type: string }, sameLengthAs: boxes }
+```
+
+The reply has `status: "paused"`, the `task`, and the input (inline for `by: session`, or as `inputHandle` per chunk for `by: subagent`).
+- **`by: session`:** do the task on the input yourself, then call `pipe__resume {"run", "step", "output"}`.
+- **`by: subagent`:** start one subagent per open chunk. Each one reads its input with `pipe__get {"handle": "<inputHandle>"}`, does the task and calls `pipe__resume {"run", "step", "chunk", "output"}`. Don't read the input yourself.
+
+`output` is checked against `expect`. If it doesn't match, the reply says why and the run stays paused.
+
+## Reusing a pipe
+
+mcp-pipe stores no named workflows. When the user wants to keep a pipe that worked, write it into a skill: a short description of when to use it, the params, and the YAML. Next time, read the skill, change tool or column names if they differ, and pass the YAML to `pipe__run`.
+
+## Per-item work outside a pipe
+
+`pipe__map {"tool": "crm__update", "over": "c5.out", "args": {"id": "{{ item.id }}"}}` calls a tool once per item of a saved list in one request, and returns the counts, failures and one reference per call.
+</skill>
+model: claude-opus-5-5
+server instructions: off
+  system: (none)
+  tools: chat__list_channels, chat__post_message, db__run_query, db__get_table_description, sheets__create_spreadsheet, sheets__update_values, sheets__get_values, pipe__get, pipe__patch, pipe__transform, pipe__map, pipe__run, pipe__resume
+  ── turn 1: in=7016 out=115 stop=tool_use
+  AI: I'll start by checking the table schema and the channel list.
+  → db__get_table_description {"table":"users_data"}
+  → chat__list_channels {}
+  ← {"table":"users_data","description":"Product analytics events. One row per user event.","columns":[{"name":"event_id","type":"INTEGER","description":"Unique identifier of the event."},{"name":"usr_id","type":"INTEGER","description":"Identifier of the user who performed the event."},{"name":"signup_date","type":"TEXT","description":"Date the user created their account (YYYY-MM-DD)."},{"name":"event_time","type":"TEXT","description":"UTC timestamp of the event (ISO 8601)."},{"name":"event_name","type":"TEXT","description":"Event type: login, page_view, purchase."},{"name":"country","type":"TEXT","description":"ISO 3166-1 alpha-2 country code of the user."},{"name":"plan","type":"TEXT","description":"Subscription plan at the time of the event: free, pro, team."}]}
+saved as {{ c1.out }}
+  ← ["general","analytics","product","random"]
+saved as {{ c2.out }}
+  ── turn 2: in=7530 out=135 stop=tool_use
+  → db__run_query {"sql":"SELECT MIN(event_time) min_e, MAX(event_time) max_e, MIN(signup_date) min_s, MAX(signup_date) max_s, COUNT(*) n, COUNT(DISTINCT usr_id) users FROM users_data"}
+  ← ERROR Error: no such column: usr_id
+saved as {{ c3.out }}
+  ── turn 3: in=7700 out=97 stop=tool_use
+  AI: Metadata says `usr_id` but the column doesn't exist; let me check the real columns.
+  → db__run_query {"sql":"SELECT * FROM users_data LIMIT 3"}
+  ← [{"event_id":1,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-02T19:33:10Z","event_name":"purchase","country":"GB","plan":"pro"},{"event_id":2,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-01T17:56:42Z","event_name":"page_view","country":"GB","plan":"pro"},{"event_id":3,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-17T05:56:48Z","event_name":"page_view","country":"GB","plan":"pro"}]
+saved as {{ c4.out }}
+  ── turn 4: in=8033 out=94 stop=tool_use
+  → pipe__patch {"call":"c3","edits":[{"find":"usr_id","replace":"user_id"}]}
+  ← [{"min_e":"2025-10-01T14:04:25Z","max_e":"2026-11-11T23:25:40Z","min_s":"2025-10-01","max_s":"2026-11-04","n":24943,"users":1500}]
+saved as {{ c5.out }}
+  ── turn 5: in=8224 out=1653 stop=tool_use
+  → db__run_query {"sql":"WITH u AS (\n  SELECT user_id, MIN(signup_date) AS signup_date FROM users_data\n  WHERE signup_date BETWEEN '2026-07-01' AND '2026-09-30' GROUP BY user_id\n), a AS (\n  SELECT DISTINCT e.user_id, CAST(julianday(date(e.event_time)) - julianday(u.signup_date) AS INTEGER) AS d\n  FROM users_data e JOIN u ON u.user_id = e.user_id\n), f AS (\n  SELECT u.user_id, strftime('%Y-%m', u.signup_date) AS cohort,\n    MAX(a.d BETWEEN 1 AND 7) AS w1, MAX(a.d BETWEEN 8 AND 14) AS w2, MAX(a.d BETWEEN 15 AND 30) AS m1, MAX(a.d BETWEEN 1 AND 30) AS any30\n  FROM u LEFT JOIN a ON a.user_id = u.user_id GROUP BY u.user_id, cohort\n)\nSELECT cohort, COUNT(*) AS users,\n  ROUND(100.0*SUM(COALESCE(w1,0))/COUNT(*),1) AS d1_7_pct,\n  ROUND(100.0*SUM(COALESCE(w2,0))/COUNT(*),1) AS d8_14_pct,\n  ROUND(100.0*SUM(COALESCE(m1,0))/COUNT(*),1) AS d15_30_pct,\n  ROUND(100.0*SUM(COALESCE(any30,0))/COUNT(*),1) AS d1_30_pct\nFROM f GROUP BY cohort\nUNION ALL\nSELECT 'Q3 2026 total', COUNT(*),\n  ROUND(100.0*SUM(COALESCE(w1,0))/COUNT(*),1), ROUND(100.0*SUM(COALESCE(w2,0))/COUNT(*),1),\n  ROUND(100.0*SUM(COALESCE(m1,0))/COUNT(*),1), ROUND(100.0*SUM(COALESCE(any30,0))/COUNT(*),1)\nFROM f"}
+  ← [{"cohort":"2026-07","users":121,"d1_7_pct":97.5,"d8_14_pct":62.8,"d15_30_pct":69.4,"d1_30_pct":100},{"cohort":"2026-08","users":118,"d1_7_pct":97.5,"d8_14_pct":61.9,"d15_30_pct":70.3,"d1_30_pct":100},{"cohort":"2026-09","users":115,"d1_7_pct":98.3,"d8_14_pct":60.9,"d15_30_pct":67,"d1_30_pct":100},{"cohort":"Q3 2026 total","users":354,"d1_7_pct":97.7,"d8_14_pct":61.9,"d15_30_pct":68.9,"d1_30_pct":100}]
+saved as {{ c6.out }}
+  ── turn 6: in=10163 out=672 stop=tool_use
+  AI: The results look reasonable. Next I'll create the sheet, write the table and post the summary in one pipe.
+  → pipe__run {"chain":"steps:\n  - id: table\n    jq: '[[\"Signup cohort\",\"Users\",\"Retention D1-7 (%)\",\"Retention D8-14 (%)\",\"Retention D15-30 (%)\",\"Active D1-30 (%)\"]] + ($c6 | map([.cohort,.users,.d1_7_pct,.d8_14_pct,.d15_30_pct,.d1_30_pct]))'\n  - id: sheet\n    call: sheets__create_spreadsheet\n    args: { title: \"User Retention – Q3 2026 (Jul–Sep signup cohorts)\" }\n  - id: write\n    call: sheets__update_values\n    args: { spreadsheet_id: \"{{ sheet.spreadsheet_id }}\", start_cell: \"A1\", values: \"{{ table }}\" }\n  - id: post\n    call: chat__post_message\n    args:\n      channel: analytics\n      text: \"{{ \\\"*User retention: Q3 2026 (Jul–Sep signup cohorts)*\\n\\\" + (c6.out[-1] | \\\"• \\\\(.users) new users. Active in days 1–7: *\\\\(.d1_7_pct)%*. Days 8–14: *\\\\(.d8_14_pct)%*. Days 15–30: *\\\\(.d15_30_pct)%*\\\") + \\\"\\n• By month (D8–14 / D15–30): \\\" + (c6.out[0:-1] | map(\\\"\\\\(.cohort) \\\\(.d8_14_pct)% / \\\\(.d15_30_pct)%\\\") | join(\\\", \\\")) + \\\"\\n• Retention = any event in that window after signup. Source: users_data.\\n📊 Sheet: \\\" + sheet.url }}\""}
+  ← ERROR {
+  "status": "failed",
+  "run": "r1",
+  "step": "table",
+  "error": "$c6 is not available (no such param, or step \"c6\" has not finished)",
+  "outputs": {}
+}
+  ── turn 7: in=10916 out=257 stop=tool_use
+  → pipe__patch {"run":"r1","step":"table","edits":[{"path":"jq","set":"[[\"Signup cohort\",\"Users\",\"Retention D1-7 (%)\",\"Retention D8-14 (%)\",\"Retention D15-30 (%)\",\"Active D1-30 (%)\"]] + (. | map([.cohort,.users,.d1_7_pct,.d8_14_pct,.d15_30_pct,.d1_30_pct]))"},{"path":"input","set":"c6.out"}]}
+  ← ERROR pipe__patch: step 1 "table": Unrecognized key: "input"
+  ── turn 8: in=11209 out=929 stop=tool_use
+  AI: jq steps can't read saved calls directly, so I'll build the table inline from `c6.out` in the write step.
+  → pipe__run {"chain":"steps:\n  - id: sheet\n    call: sheets__create_spreadsheet\n    args: { title: \"User Retention – Q3 2026 (Jul–Sep signup cohorts)\" }\n  - id: write\n    call: sheets__update_values\n    args: { spreadsheet_id: \"{{ sheet.spreadsheet_id }}\", start_cell: \"A1\", values: \"{{ [[\\\"Signup cohort\\\",\\\"Users\\\",\\\"Retention D1-7 (%)\\\",\\\"Retention D8-14 (%)\\\",\\\"Retention D15-30 (%)\\\",\\\"Active D1-30 (%)\\\"]] + (c6.out | map([.cohort,.users,.d1_7_pct,.d8_14_pct,.d15_30_pct,.d1_30_pct])) }}\" }\n  - id: post\n    call: chat__post_message\n    args:\n      channel: analytics\n      text: \"{{ \\\"*User retention: Q3 2026 (Jul–Sep signup cohorts)*\\n\\\" + (c6.out[-1] | \\\"• \\\\(.users) new users. Active in days 1–7: *\\\\(.d1_7_pct)%*. Days 8–14: *\\\\(.d8_14_pct)%*. Days 15–30: *\\\\(.d15_30_pct)%*\\\") + \\\"\\n• By month (D8–14 / D15–30): \\\" + (c6.out[0:-1] | map(\\\"\\\\(.cohort) \\\\(.d8_14_pct)% / \\\\(.d15_30_pct)%\\\") | join(\\\", \\\")) + \\\"\\n• Retention = any event in that window after signup. Source: users_data.\\n📊 Sheet: \\\" + sheet.url }}\""}
+  ← ERROR {
+  "status": "failed",
+  "run": "r2",
+  "step": "post",
+  "error": "mcp-pipe: call failed: jq: error: sheet/0 is not defined at <top-level>, line 5, column 17:\n    📊 Sheet: \" + sheet.url \n                    ^^^^^\njq: 1 compile error in \"{{ \"*User retention: Q3 2026 (Jul–Sep signup cohorts)*\n\" + (c6.out[-1] | \"• \\(.users) new users. Active in days 1–7: *\\(.d1_7_pct)%*. Days 8–14: *\\(.d8_14_pct)%*. Days 15–30: *\\(.d15_30_pct)%*\") + \"\n• By month (D8–14 / D15–30): \" + (c6.out[0:-1] | map(\"\\(.cohort) \\(.d8_14_pct)% / \\(.d15_30_pct)%\") | join(\", \")) + \"\n• Retention = any event in that window after signup. Source: users_data.\n📊 Sheet: \" + sheet.url }}\" (to send literal braces, write \\{{)",
+  "outputs": {
+    "sheet": "c7.out",
+    "write": "c8.out"
+  }
+}
+  ── turn 9: in=12582 out=123 stop=tool_use
+  → pipe__patch {"run":"r2","step":"post","edits":[{"find":"+ sheet.url","replace":"+ c7.out.url"}]}
+  ← {
+  "status": "done",
+  "run": "r2",
+  "outputs": {
+    "sheet": "c7.out",
+    "write": "c8.out",
+    "post": "c10.out"
+  },
+  "result": {
+    "ok": true,
+    "channel": "analytics",
+    "ts": "2026-11-14T10:11:26.110Z"
+  }
+}
+  ── turn 10: in=12828 out=55 stop=tool_use
+  → pipe__get {"handle":"c7.out.url"}
+  ← https://sheets.example.com/sh1
+  ── turn 11: in=12901 out=653 stop=end_turn
+  AI: I calculated retention for users who signed up in Q3 2026 (July–September), saved the results to a new spreadsheet and posted a summary with the link to #analytics.
+
+**Spreadsheet:** https://sheets.example.com/sh1
+
+**Q3 2026: 354 new users**
+
+| Signup month | Users | Days 1–7 | Days 8–14 | Days 15–30 |
+|---|---|---|---|---|
+| Jul | 121 | 97.5% | 62.8% | 69.4% |
+| Aug | 118 | 97.5% | 61.9% | 70.3% |
+| Sep | 115 | 98.3% | 60.9% | 67.0% |
+| **Total** | **354** | **97.7%** | **61.9%** | **68.9%** |
+
+- **Main finding:** almost everyone comes back in the first week, then about 4 in 10 users drop off in the second week. The three months are very close to each other.
+- **Days 15–30 is higher than days 8–14,** but only because that window is longer (16 days vs 7). It doesn't mean users are coming back.
+
+**How I calculated it:**
+- **"Last quarter":** the data runs to 11 Nov 2026, so I used Q3 2026, the last complete quarter. Every Q3 signup has had at least 30 days to show up in the data.
+- **Retained:** a user counts as retained in a window if they had any event (login, page view or purchase) in that period after signup.
+- **Column name:** the table's documentation says `usr_id`, but the real column is `user_id`, so the query uses that.
+
+**Worth checking:** 100% of users had at least one event in their first 30 days, which is unusually high. It could mean the data only includes active users, or that it's test data. I'd check that before relying on these numbers.
+
+== done: 11 turns, 11 tool calls, in=109102 out=4783
+
+== sheets.json
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "User Retention – Q3 2026 (Jul–Sep signup cohorts)",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "Retention D1-7 (%)",
+      "D1": "Retention D8-14 (%)",
+      "E1": "Retention D15-30 (%)",
+      "F1": "Active D1-30 (%)",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": 97.5,
+      "D2": 62.8,
+      "E2": 69.4,
+      "F2": 100,
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": 97.5,
+      "D3": 61.9,
+      "E3": 70.3,
+      "F3": 100,
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": 98.3,
+      "D4": 60.9,
+      "E4": 67,
+      "F4": 100,
+      "A5": "Q3 2026 total",
+      "B5": 354,
+      "C5": 97.7,
+      "D5": 61.9,
+      "E5": 68.9,
+      "F5": 100
+    }
+  }
+}
+
+== chat.json
+[
+  {
+    "channel": "analytics",
+    "text": "*User retention: Q3 2026 (Jul–Sep signup cohorts)*\n• 354 new users. Active in days 1–7: *97.7%*. Days 8–14: *61.9%*. Days 15–30: *68.9%*\n• By month (D8–14 / D15–30): 2026-07 62.8% / 69.4%, 2026-08 61.9% / 70.3%, 2026-09 60.9% / 67%\n• Retention = any event in that window after signup. Source: users_data.\n📊 Sheet: https://sheets.example.com/sh1",
+    "ts": "2026-11-14T10:11:26.110Z"
+  }
+]

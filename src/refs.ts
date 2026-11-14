@@ -174,13 +174,22 @@ export async function evalRef(inner: string, resolve: Resolver): Promise<RefTarg
 }
 
 /**
- * The general form: any jq expression that mentions saved results by handle, e.g.
- * `{{ [["name","total"]] + (c7.out | map([.name, .total])) }}`. Handles outside string literals become jq
- * variables. Returns undefined when the expression mentions no handle.
+ * The general form: any jq expression over saved values, e.g. `{{ [["name","total"]] + (c7.out | map([.name, .total])) }}`
+ * or, inside a pipe, `{{ "Sheet: " + sheet.url }}`. Handles and known names (params, steps, item) outside string
+ * literals become jq variables. Returns undefined when the expression mentions none.
  */
 async function evalJqWithHandles(inner: string, resolve: Resolver): Promise<RefTarget | undefined> {
   const vars: Record<string, unknown> = {};
   const hidden = new Set<string>();
+  const local = new Set([...inner.matchAll(/\bas\s+\$([A-Za-z_]\w*)/g)].map((m) => m[1]!));
+  const bind = (name: string, v: string): boolean => {
+    if (v in vars) return true;
+    let t: RefTarget;
+    try { t = resolve(name); } catch { return false; }
+    vars[v] = t.value;
+    t.hiddenFrom?.forEach((h) => hidden.add(h));
+    return true;
+  };
   let out = '';
   let quote = false;
   for (let i = 0; i < inner.length; i++) {
@@ -192,24 +201,40 @@ async function evalJqWithHandles(inner: string, resolve: Resolver): Promise<RefT
       continue;
     }
     if (ch === '"') { quote = true; out += ch; continue; }
-    const m = /^\$?(c\d+)(?:\.(in|out))?(?![\w-])/.exec(inner.slice(i));
-    if (m && !/[\w$.]/.test(inner[i - 1] ?? '')) {
-      const v = `__${m[1]}_${m[2] ?? 'out'}`;
-      if (!(v in vars)) {
-        const t = resolve(`${m[1]}.${m[2] ?? 'out'}`);
-        vars[v] = t.value;
-        t.hiddenFrom?.forEach((h) => hidden.add(h));
-      }
+    const prev = inner[i - 1] ?? '';
+    const rest = inner.slice(i);
+    const h = /^\$?(c\d+)(?:\.(in|out))?(?![\w-])/.exec(rest);
+    if (h && !/[\w$.]/.test(prev)) {
+      const v = `__${h[1]}_${h[2] ?? 'out'}`;
+      if (!bind(`${h[1]}.${h[2] ?? 'out'}`, v)) throw new Error(`unknown handle ${h[1]}`);
       out += `$${v}`;
-      i += m[0].length - 1;
+      i += h[0].length - 1;
       continue;
     }
+    // a param, step or item name: a bare word (or $word) that the resolver knows, not a jq keyword,
+    // function call or object key
+    const n = /^(\$?)([A-Za-z_]\w*)(?!\w)/.exec(rest);
+    if (n && !/[\w.]/.test(prev) && !(n[1] && local.has(n[2]!)) && !JQ_WORDS.has(n[2]!)) {
+      const after = inner.slice(i + n[0].length);
+      if (!/^\s*[(:]/.test(after) && bind(n[2]!, `__n_${n[2]}`)) {
+        out += `$__n_${n[2]}`;
+        i += n[0].length - 1;
+        continue;
+      }
+    }
+    if (n) { out += n[0]; i += n[0].length - 1; continue; }
     out += ch;
   }
   if (!Object.keys(vars).length) return undefined;
   const value = await transform(null, out, vars);
   return { value, ...(hidden.size ? { hiddenFrom: [...hidden] } : {}) };
 }
+
+const JQ_WORDS = new Set(['if', 'then', 'elif', 'else', 'end', 'as', 'def', 'reduce', 'foreach', 'try', 'catch', 'label',
+  'and', 'or', 'not', 'import', 'include', 'null', 'true', 'false', 'empty', 'error', 'length', 'keys', 'values', 'add',
+  'tostring', 'tonumber', 'type', 'reverse', 'sort', 'unique', 'flatten', 'min', 'max', 'floor', 'ceil', 'round',
+  'ascii_downcase', 'ascii_upcase', 'tojson', 'fromjson', 'to_entries', 'from_entries', 'paths', 'input', 'inputs', 'now',
+  'first', 'last', 'any', 'all', 'range', 'map', 'select', 'join', 'split', 'test', 'sub', 'gsub', 'group_by', 'sort_by']);
 
 /** Resolves an expression given with or without braces: `c3.out.rows`, `{{ c3.out | length }}`. */
 export async function evalExpr(expr: string, resolve: Resolver): Promise<RefTarget> {

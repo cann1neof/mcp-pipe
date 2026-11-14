@@ -30,7 +30,24 @@ export const transformOp: Op = {
       const shape = input.hiddenFrom?.length ? shapeOf(input.value, 'types') : shapeOf(input.value);
       throw new Error(`${(e as Error).message} (input: ${shape})`);
     }
+    if (await ignoresInput(filter, out)) {
+      throw new Error('the jq filter gives the same output whatever its input, so it does not transform "from"; ' +
+        'a literal value can be passed directly as a tool argument');
+    }
     const rec = core.recordInternal('transform', { from, jq: filter }, out, input.hiddenFrom);
     return core.respond(rec);
   },
 };
+
+/** True when the filter returns `out` for unrelated inputs too, i.e. it is a constant. Errors count as "depends on input". */
+async function ignoresInput(filter: string, out: unknown): Promise<boolean> {
+  const same = JSON.stringify(out);
+  for (const probe of [null, 0, 'mcp-pipe-probe', [7], { 'mcp-pipe-probe': 7 }]) {
+    try {
+      if (JSON.stringify(await transform(probe, filter)) !== same) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}

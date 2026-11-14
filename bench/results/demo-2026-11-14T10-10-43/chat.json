@@ -1,0 +1,7 @@
+[
+  {
+    "channel": "analytics",
+    "text": "*User retention: Q3 2026 (Jul–Sep signup cohorts)*\n• 354 new users. Active in days 1–7: *97.7%*. Days 8–14: *61.9%*. Days 15–30: *68.9%*\n• By month (D8–14 / D15–30): 2026-07 62.8% / 69.4%, 2026-08 61.9% / 70.3%, 2026-09 60.9% / 67%\n• Retention = any event in that window after signup. Source: users_data.\n📊 Sheet: https://sheets.example.com/sh1",
+    "ts": "2026-11-14T10:11:26.110Z"
+  }
+]

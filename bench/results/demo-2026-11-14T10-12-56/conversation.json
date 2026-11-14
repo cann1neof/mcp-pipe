@@ -1,0 +1,516 @@
+{
+  "model": "claude-opus-5-5",
+  "tools": [
+    {
+      "name": "chat__list_channels",
+      "description": "List the channels in the workspace.\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "chat__post_message",
+      "description": "Post a message to a channel. Supports Markdown.\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "description": "channel name without #"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "text"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "db__run_query",
+      "description": "Execute a SQL query against the analytics database and return the result rows as JSON.\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string",
+            "description": "SQL query (SQLite dialect)"
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "db__get_table_description",
+      "description": "Return metadata for a table: its description and each column's name, type and description.\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "table": {
+            "type": "string",
+            "description": "table name"
+          }
+        },
+        "required": [
+          "table"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "sheets__create_spreadsheet",
+      "description": "Create a new, empty spreadsheet. Returns its id and URL.\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "sheets__update_values",
+      "description": "Write a 2-D array of values into a spreadsheet, starting at the given top-left cell (A1 notation).\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "spreadsheet_id": {
+            "type": "string"
+          },
+          "start_cell": {
+            "type": "string",
+            "description": "e.g. \"A1\""
+          },
+          "values": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "description": "rows of cell values"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{[\\s\\S]*\\}\\}\\s*$",
+                "description": "a saved result instead of a literal value, e.g. \"{{ c3.out }}\", \"{{ c3.out.rows }}\" or \"{{ c3.out | map(.id) }}\""
+              }
+            ]
+          }
+        },
+        "required": [
+          "spreadsheet_id",
+          "start_cell",
+          "values"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "sheets__get_values",
+      "description": "Read all non-empty cells of a spreadsheet.\n\nEvery result ends with \"saved as {{ cN.out }}\". Any argument can take a saved result instead of a literal: \"{{ c3.out }}\", a part \"{{ c3.out.rows[0].id }}\", or any jq expression over saved results \"{{ [[\"name\",\"total\"]] + (c3.out | map([.name, .total])) }}\". The value is filled in before the call, so data from one tool goes to the next without being copied.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "spreadsheet_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spreadsheet_id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "pipe__get",
+      "description": "Read the arguments or the result of an earlier tool call by its handle. Handle forms: \"c3.out\" (result), \"c3.in\" (arguments); add a path to read part of a value, e.g. \"c3.out.items[0].id\". Optional \"jq\" applies a jq filter to the value first. \"status\" returns the connected servers and any startup errors.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "description": "call handle with optional path, or \"status\""
+          },
+          "jq": {
+            "type": "string",
+            "description": "optional jq filter applied to the value"
+          }
+        },
+        "required": [
+          "handle"
+        ]
+      }
+    },
+    {
+      "name": "pipe__patch",
+      "description": "Re-run an earlier tool call with modified arguments, sending only the change. The call's stored arguments are copied, the edits are applied to the copy, and the result is executed as a new call with its own handle. Edit forms: {find, replace} replaces text in string arguments (all of them, or only under \"path\"); {path, set} sets the value at \"path\". With no edits the call is re-run unchanged. To fix a step of a run instead, pass \"run\" (run id) and \"step\": the edits apply to the step definition (e.g. path \"args.sql\", or find/replace in its text) and the run continues from that step; earlier steps are not repeated.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "call": {
+            "type": "string",
+            "description": "handle of the call, e.g. \"c3\""
+          },
+          "run": {
+            "description": "run id (with \"step\"); or, with \"call\", false to only store the new call",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "step": {
+            "type": "string",
+            "description": "step id inside the run"
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "find": {
+                  "type": "string"
+                },
+                "replace": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "path inside the arguments / step, e.g. \"a.b[0]\""
+                },
+                "set": {
+                  "description": "new value for \"path\""
+                }
+              }
+            }
+          },
+          "rerun": {
+            "type": "boolean",
+            "description": "with run+step: continue the run after patching (default true)"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "token from a needs_confirm reply"
+          }
+        }
+      }
+    },
+    {
+      "name": "pipe__transform",
+      "description": "Reshape a stored value with a jq filter and store the output under a new handle, without the data passing through the conversation. \"from\" is a handle with optional path (e.g. \"c3.out.items\").",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "handle of the input value, e.g. \"c3.out\""
+          },
+          "jq": {
+            "type": "string",
+            "description": "jq filter"
+          }
+        },
+        "required": [
+          "from",
+          "jq"
+        ]
+      }
+    },
+    {
+      "name": "pipe__map",
+      "description": "Call one tool once per item of a stored list, in a single request. \"over\" is a handle of a list (e.g. \"c3.out.rows\", or \"{{ c3.out | map(.id) }}\"). In \"args\", \"{{ item }}\" is the current item and \"{{ item.<path> }}\" part of it. Returns how many calls succeeded, the failures, and a handle per call; the outputs are stored as a list under the map's own handle. \"dry_run\" returns the plan only.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "description": "tool name as listed, e.g. \"server__tool\""
+          },
+          "over": {
+            "type": "string",
+            "description": "handle of the list to iterate"
+          },
+          "args": {
+            "type": "object",
+            "description": "arguments for each call; may use {{ item }} refs"
+          },
+          "concurrency": {
+            "type": "number",
+            "description": "parallel calls (default 4)"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "only if a reply asked for it: the token from that needs_confirm reply"
+          }
+        },
+        "required": [
+          "tool",
+          "over",
+          "args"
+        ]
+      }
+    },
+    {
+      "name": "pipe__run",
+      "description": "Run a multi-step plan in one request: pass a new \"chain\" (JSON or YAML text, e.g. copied from a skill) with its \"params\", or an existing \"run\" id to run it again. Steps run back to back in one request; every step's output is saved and can be referred to by later steps. A chain is {params?: {name: type}, steps: [...]}; each step has an \"id\" and one of: {call: \"<tool>\", args: {...}} calls a tool; {jq: \"<program>\"} computes a value, with params, earlier step outputs and saved calls as jq variables ($id, $c7); {map: \"<tool>\", over: \"<step id or handle of a list>\", args: {...}} calls a tool once per item (\"{{ item }}\", \"{{ item.path }}\"); {ai: \"<task>\", input?: \"<jq program>\", by?: \"session\"|\"subagent\", batch?: n, expect?: <JSON Schema>} pauses the run for a step that needs judgement (done by you or a subagent), continued with pipe__resume. In args, \"{{ name[.path] [| jq] }}\" refers to a param, an earlier step's output, or any handle. The reply lists each step's output handle and the last step's result. A failing step stops the run; pipe__patch {run, step, edits} edits that step and re-runs from it without repeating earlier ones. \"from\" re-runs from a step; \"dry_run\" returns the plan; \"force\" repeats map items that already succeeded.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "description": "chain object (or YAML/JSON text)"
+          },
+          "params": {
+            "type": "object",
+            "description": "values for the chain's params"
+          },
+          "run": {
+            "type": "string",
+            "description": "existing run id, e.g. \"r1\""
+          },
+          "from": {
+            "type": "string",
+            "description": "step id to run again from"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "validate and return the plan without running it"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "only if a reply asked for it: the token from that needs_confirm reply"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "pipe__resume",
+      "description": "Give the result of a paused ai step and continue its run. \"output\" is checked against the step's \"expect\"; if it does not match, the reply says why and the run stays paused. For a batched step, resume each chunk by its index.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "string"
+          },
+          "step": {
+            "type": "string"
+          },
+          "chunk": {
+            "type": "number",
+            "description": "chunk index, for batched steps"
+          },
+          "output": {
+            "description": "the step result (any JSON value)"
+          }
+        },
+        "required": [
+          "run",
+          "step",
+          "output"
+        ]
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics\n\n<skill name=\"skills/mcp-pipe/SKILL.md\">\n---\nname: mcp-pipe\ndescription: How to work with tools served through mcp-pipe (tools named <server>__<tool> plus pipe__run, pipe__patch, pipe__transform, pipe__map, pipe__get, pipe__resume). Use for any task that calls these tools, especially when data from one tool goes into another, a list needs one call per item, or a call has to be fixed and repeated.\n---\n\n# Working with mcp-pipe\n\nmcp-pipe sits between you and the MCP servers. It saves every call: its arguments and its result. Each result ends with its reference, for example `saved as {{ c7.out }}`. Work with these references instead of with the data itself.\n\n## Rules\n\n1. **Never copy data from a result into another call.** Pass the reference instead. mcp-pipe fills in the value before the call:\n   - the whole result: `\"{{ c7.out }}\"`\n   - a part: `\"{{ c7.out.rows[0].id }}\"`\n   - reshaped with jq: `\"{{ c7.out | map([.name, .total]) }}\"`\n   - any jq expression over saved results: `\"{{ [[\"Name\", \"Total\"]] + (c7.out | map([.name, .total])) }}\"`\n\n   A string that is exactly one reference becomes the value with its own type (array, object, number). A reference inside longer text is inserted as text.\n2. **Compute in the tools, not in your head.** Percentages, totals, rounding, formatting and joins belong in the query (SQL) or in jq over a saved result. Write the formula, not the numbers.\n3. **Fix a call by patching it, not by rewriting it.** `pipe__patch {\"call\": \"c3\", \"edits\": [{\"find\": \"usr_id\", \"replace\": \"user_id\"}]}` copies the saved arguments, applies the change and runs the call again. Edits are `{find, replace}` (text in string arguments) or `{path, set}` (any value).\n4. **Read only what you need.** Large results come back as a preview. Use `pipe__get {\"handle\": \"c7.out.rows\", \"jq\": \".[0:5]\"}` or a path like `c7.out.rows[0].id` for the part you need, not the whole value.\n5. **`pipe__transform` must transform its input.** It applies jq to a saved value and saves the result under a new reference. A filter that ignores its input is refused; pass literal values directly in the tool argument instead.\n\n## Workflow\n\n1. **Look first, with single calls.** Read schemas and descriptions, take small samples (`LIMIT 3`), check date ranges and IDs. Don't trust metadata blindly: if a call fails on a name from the docs, check the real one, then patch.\n2. **Then write the rest as one pipe** and run it with `pipe__run`. Do this as soon as you know the remaining steps, especially when one step's output feeds the next. The steps run back to back without a round trip through you, and no intermediate data enters the conversation.\n3. **If a step fails, patch that step.** `pipe__patch {\"run\": \"r1\", \"step\": \"cohorts\", \"edits\": [...]}` edits the step and continues the run from it. Earlier steps are not repeated. Don't write a new pipe.\n4. **Report from the outputs.** The reply lists each step's reference and the last step's result. Use `pipe__get` on a step output if you need to show part of it.\n\nSingle calls are fine for one-off lookups. Use a pipe once there are two or more dependent steps.\n\n## Pipe format\n\n`pipe__run {\"chain\": <YAML or JSON>, \"params\": {...}}`:\n\n```yaml\nparams: { sql: string, channel: string }\nsteps:\n  - id: rows                      # a tool call\n    call: db__run_query\n    args: { sql: \"{{ sql }}\" }\n  - id: table                     # jq: params and earlier steps are $variables\n    jq: '[[\"Country\", \"Revenue\"]] + ($rows | map([.country, .revenue]))'\n  - id: sheet\n    call: sheets__create_spreadsheet\n    args: { title: \"Revenue\" }\n  - id: write                     # earlier steps as references in arguments\n    call: sheets__update_values\n    args: { spreadsheet_id: \"{{ sheet.spreadsheet_id }}\", start_cell: \"A1\", values: \"{{ table }}\" }\n  - id: notify                    # one call per item of a list\n    map: chat__post_message\n    over: rows\n    args: { channel: \"{{ channel }}\", text: \"{{ item.country }}: {{ item.revenue }}\" }\n```\n\n- In `args`, `{{ name }}` refers to a param, an earlier step id, or any saved call (`c7.out`), and `{{ <jq expression> }}` can combine them: `{{ \"Sheet: \" + sheet.url }}`. In `jq` steps they are variables: `$rows`, `$c7`.\n- A pipe can start from calls you already made: refer to them as `c7.out` / `$c7` instead of repeating them.\n- `map` steps call a tool once per item: `{{ item }}`, `{{ item.path }}`. Items that already succeeded are skipped when the step runs again.\n- `dry_run: true` checks the pipe and returns the plan without running it. `from: \"<step>\"` runs again from a step.\n\n### Steps that need judgement\n\nAn `ai` step pauses the run for work only a model can do (translate, classify, summarise):\n\n```yaml\n  - id: tr\n    ai: \"Translate each item to Hebrew. Return a JSON array, same order, same length.\"\n    input: '$boxes | map(.text)'\n    by: subagent                  # or session\n    batch: 20\n    expect: { type: array, items: { type: string }, sameLengthAs: boxes }\n```\n\nThe reply has `status: \"paused\"`, the `task`, and the input (inline for `by: session`, or as `inputHandle` per chunk for `by: subagent`).\n- **`by: session`:** do the task on the input yourself, then call `pipe__resume {\"run\", \"step\", \"output\"}`.\n- **`by: subagent`:** start one subagent per open chunk. Each one reads its input with `pipe__get {\"handle\": \"<inputHandle>\"}`, does the task and calls `pipe__resume {\"run\", \"step\", \"chunk\", \"output\"}`. Don't read the input yourself.\n\n`output` is checked against `expect`. If it doesn't match, the reply says why and the run stays paused.\n\n## Reusing a pipe\n\nmcp-pipe stores no named workflows. When the user wants to keep a pipe that worked, write it into a skill: a short description of when to use it, the params, and the YAML. Next time, read the skill, change tool or column names if they differ, and pass the YAML to `pipe__run`.\n\n## Per-item work outside a pipe\n\n`pipe__map {\"tool\": \"crm__update\", \"over\": \"c5.out\", \"args\": {\"id\": \"{{ item.id }}\"}}` calls a tool once per item of a saved list in one request, and returns the counts, failures and one reference per call.\n</skill>"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS+gQKEAgTGAI4AUIIdGhpbmtpbmcSDEACFsD+J8CK/wd0kRoMxMLFuYXDbb4Lhs7hIjA0/RRGFTxKH+U30wvitd44A4+wac7JAYdwaARjSJQwO+PdnSkWRfBChJ4WyAu307cqlwQe6mKJh0zuqIbadtuSWGpn5njxsxancpXE9wm0Y49IBAm0/fVgpwWmLPtwDoDvlBfLRQnQxEDySbidgJk+TtlunIDBOKwErzP0Z3fRvHRqFD9tivDgQNQYBXs/YmqkPdsnCkaoqMKySQnmYSTEwg8sQ04i3zg4tXD0iS+kQT3Mjx6YCpkJDx00DM4bN6HKd7zpBajfIPkeZGWmARRya3jqOI5YE4d1NCmq5jxUfp9QZauxxGEjtPiLPtkE9gf/oXEqYEWFDSwy9LsT8Ke97sWx9uhWfvbrltQC680p4OgjCpA3g0YxVRw13Ytc0XFG9K2aV5y32o/kKC97UepSXi31P47Yfq/x6U7Uj5408FCkYD8WSuS4jxnA53PrGyHHhmTDXBys/Q6C79VznCwjISOYz4YHT5w2Ig1BEzTNsd2vN8WD3rHFf3jUDlDcuAjw137qUZ9poeEmlAbJdxMNmwQLil+DBTKayV/6oRCUKCFNkf+urRDFJQuWEKjNOdmA5yxwxrQVQhy7nn1NMpOtQRjNKwpNb4jU1Vn75EMgN23VK6NzX9GbQNjnBKoHb7qjRxHcrsS2exnD2hGhYCcz6mGhByif8baDAyrnS9fe+2kGSB6a7v6EfeSanMwioMTgb/lk7ujYPyyeVvmVvWi/pfWPySv5GDBuqYQb7wolT1GseU9SI3DSrdbUAUxY5cHMj7qXHrrjhWqLGAE="
+        },
+        {
+          "type": "text",
+          "text": "I'll start by checking the table structure."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01HMEJHuq5FLZVNBs4jRoVwb",
+          "name": "db__get_table_description",
+          "input": {
+            "table": "users_data"
+          },
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01XPYDtVPDKD6DVgCr5oHRCQ",
+          "name": "db__run_query",
+          "input": {
+            "sql": "SELECT * FROM users_data LIMIT 3"
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01HMEJHuq5FLZVNBs4jRoVwb",
+          "content": "{\"table\":\"users_data\",\"description\":\"Product analytics events. One row per user event.\",\"columns\":[{\"name\":\"event_id\",\"type\":\"INTEGER\",\"description\":\"Unique identifier of the event.\"},{\"name\":\"usr_id\",\"type\":\"INTEGER\",\"description\":\"Identifier of the user who performed the event.\"},{\"name\":\"signup_date\",\"type\":\"TEXT\",\"description\":\"Date the user created their account (YYYY-MM-DD).\"},{\"name\":\"event_time\",\"type\":\"TEXT\",\"description\":\"UTC timestamp of the event (ISO 8601).\"},{\"name\":\"event_name\",\"type\":\"TEXT\",\"description\":\"Event type: login, page_view, purchase.\"},{\"name\":\"country\",\"type\":\"TEXT\",\"description\":\"ISO 3166-1 alpha-2 country code of the user.\"},{\"name\":\"plan\",\"type\":\"TEXT\",\"description\":\"Subscription plan at the time of the event: free, pro, team.\"}]}\nsaved as {{ c1.out }}",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01XPYDtVPDKD6DVgCr5oHRCQ",
+          "content": "[{\"event_id\":1,\"user_id\":1,\"signup_date\":\"2026-05-29\",\"event_time\":\"2026-06-02T19:33:10Z\",\"event_name\":\"purchase\",\"country\":\"GB\",\"plan\":\"pro\"},{\"event_id\":2,\"user_id\":1,\"signup_date\":\"2026-05-29\",\"event_time\":\"2026-06-01T17:56:42Z\",\"event_name\":\"page_view\",\"country\":\"GB\",\"plan\":\"pro\"},{\"event_id\":3,\"user_id\":1,\"signup_date\":\"2026-05-29\",\"event_time\":\"2026-06-17T05:56:48Z\",\"event_name\":\"page_view\",\"country\":\"GB\",\"plan\":\"pro\"}]\nsaved as {{ c2.out }}",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS5wUKEAgTGAI4AUIIdGhpbmtpbmcSDNFt11+fqDCNezATHBoMWQFch6bjhscYjciWIjDeXTYJqgxpCuqrjsg9raM053OOV+LORuv68w7h5KE6+O/AZgzIRQDYBPs6k8AbxbgqhAV/VCADHWEVGSD3iQtFWEpPguLmpcviQ1fCYottofu88wIkZ8A8go8XTDGPeICCaVOPAb0JvB4wDkbtI8OFyScp8sliMmlV/clQjrVTT37KSLyz287Wqti1M2Is/JpYCKY3JPpGgYQWLTtPBja4SvIDKvofq5D3ilYyoS1YNhvYy0MWEhP29jz2Lts2neXB6RvUQS/1QMkkgMgFqxP+hsGgBqI52JPR2hSTBdkHR+EHgBrodrjtmnZKJsH/62/c3Wjt8jPT3/J2qNeDeljqJwwXu/wqk6gMj+losEeDr8NzZ8KiIP6FsXkzzYAvrEw1sxJKsUS6M12h0uSw7AVlNsXALcYbkomP2N21zWOtXHFc8b/MZjqRFZjPNxMBD50oKMPSonBCG93Y/vMQPwIt2OsTGm/fSi7hg193Gkr0GZFoZEzGwQwf95XSmUgdkpoILrBvy5adf3zPs1E3mAxTUbtFYJJsDkhOYdvejb5f+nKjJiED1TLJxtdBpRbByIZBrTeu1tT63mWa6W89KI9SdOvcaJySuq1qQ7HKPLEbWdK4j8EDFvrrG34HAV5sShk0JZ83h6IOGdo63xkpYN1jgy328g3nBFlQ7SYHMoLjUwqTn9CcW+sDS1X2Mqp4jcM8UMlGsYfQmfoWEduGNJmRyVu6zQQtMFE/aTAUgo4ynvfBrwad+87f4rsVqcPnjdHgL7J4zvYN1oJZ+4TtuJfMxqfXMjq3S3VcFs4zdZKvhsG5Fe7zuHpw+qBOB0q1FuVoePrgwLRajkiBFqAHXehi0GeEV+v/X6IrMtg5Jo5+2b65b0WxG1Utc144wEvinBPNEP01h/tRV1B2453cmcxMB7pinRPmtRgB"
+        },
+        {
+          "type": "text",
+          "text": "Note: the docs say `usr_id`, but the real column is `user_id`. Next I'll check the date ranges."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01S13wAS7gcjpqPALCrFqQLV",
+          "name": "db__run_query",
+          "input": {
+            "sql": "SELECT MIN(signup_date) min_signup, MAX(signup_date) max_signup, MIN(event_time) min_ev, MAX(event_time) max_ev, COUNT(DISTINCT user_id) users, COUNT(*) n FROM users_data"
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01S13wAS7gcjpqPALCrFqQLV",
+          "content": "[{\"min_signup\":\"2025-10-01\",\"max_signup\":\"2026-11-04\",\"min_ev\":\"2025-10-01T14:04:25Z\",\"max_ev\":\"2026-11-11T23:25:40Z\",\"users\":1500,\"n\":24943}]\nsaved as {{ c3.out }}",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "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"
+        },
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS1QcKEQgTGAI4AUIJbmFycmF0aW9uEgyVYUZa2JvyHDzA23waDO5gmvjuNg34cIdSziIwIuUvZZ0ftnV8FOzlLaUgev24OUU6wOknS1alloUqrIjQeVGLBbzwOjrFbYXPWHzTKvEGygimXsi7Kz/N49FbonrBg7JY13pfzADltXC2l54F1FRemf+OJ9JHkh1gTjxcfKyNeBQDpoMC9s2xv3FPEuLAxXXFMcxJ4KClH52OqCl9t6OYCrNisFtd7xMMyRS57+jCFwE6c5F3oZLwyFrOmP9670dc1fkNpiq2HQweA2uIsR4I9fu+xVuqrUDUlXBtbOJ0wAFEgJRC6OsaCAie3OZtqtcrjzkGS5FYVDpEDjhZEtORQeiONeNHnwJnUHoWC7SdWPYwJxU8M2EkJwAZSHmtuekZ2P4E1W1VFK2hX8RcmMa47vYt2znkxAzIY7V9qQsoW1LeQ3mU2co4lGn1P5k6f8Q68RW9Oxu9ZOwo3HVLx3DWFxD2YcSFE7GlBRGPBZnrLwOnsAbg5hVs7qgSN5sYUbdo7qZ5S8WNe394Kzf5wvE3LZOoaVt7RPSFJ7SXZXF8PnmfywT5alUV+9WgkmBTeR4CIpODeAj7dmoKRIsley8mxLvBBIeW9rEhfaOj6/6qb/YtudmB0r0WeKiTqchWXYiS0ZVgF65ChBZJSdvF0d67jd/leo4vqmCee847Sdu6o9wwl9wlpiIrN8DTZvrE3Fhhz3CfdJH4vGMJHpcQjU1wNXirot7cMASsaf0DckMhTya+CSONK7rq28VIWdm2O3Sgc6klwcTmMxj2QpRcntmK3u4FtOrU8fUt95ZhUVS9qOdGsom5weOs3zaGFrP8zB7RN4NgtMwcXoB7VTZMHKOcrfouuPuRRvcKXe/TyX+HzMMzubApaWxtLdGnlWb/gaBnOIJ1eaaOY1nwjtcbocrnA76GXOUg5QtoythP1ZYBIZfDdm0Jq+vUHxMgAYN2Drd7OXropTqchCGqNLG3Om/lrBU8snyIaJOpgIBsdxbBTSnXBOk6WRV1vYPc2RSO7nfNoWuhvvR+RcVM9LDwgfQLTxA2Fg1AePXpySc+A6Kn5W+pAS16Ota/gHRmLl9OKic2NqR2ekUEb3plAcwCjmIZQ1rq7KstPuUjZiu6s2aTKyo5yMFlCOcvIsSrryaH599A3DITM40lxw1rvLe6HzLN1S4RiUI7UNC82TRTPETk02gMzjRTOAInZRYLl41q2ol9aoch2CDs1oyXyCS1e6DnpvE4Zo5Egi138C4BuICRfXR69GkTWAC37t5qEBs2Zz8YAQ=="
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_018xxcjNNzRZQDwGrFP8bAi5",
+          "name": "pipe__run",
+          "input": {
+            "chain": "steps:\n  - id: ret\n    call: db__run_query\n    args:\n      sql: |\n        WITH u AS (\n          SELECT user_id, MIN(signup_date) AS signup_date FROM users_data\n          WHERE signup_date BETWEEN '2026-07-01' AND '2026-09-30' GROUP BY user_id),\n        a AS (\n          SELECT u.user_id, substr(u.signup_date,1,7) AS cohort,\n            MAX(CASE WHEN d BETWEEN 1 AND 7 THEN 1 ELSE 0 END) w1,\n            MAX(CASE WHEN d BETWEEN 8 AND 14 THEN 1 ELSE 0 END) w2,\n            MAX(CASE WHEN d BETWEEN 22 AND 28 THEN 1 ELSE 0 END) w4\n          FROM u LEFT JOIN (\n            SELECT user_id, CAST(julianday(date(event_time)) - julianday(signup_date) AS INTEGER) d FROM users_data\n          ) e ON e.user_id = u.user_id\n          GROUP BY u.user_id, cohort)\n        SELECT cohort, COUNT(*) users,\n          ROUND(100.0*SUM(w1)/COUNT(*),1) w1_pct,\n          ROUND(100.0*SUM(w2)/COUNT(*),1) w2_pct,\n          ROUND(100.0*SUM(w4)/COUNT(*),1) w4_pct\n        FROM a GROUP BY cohort\n        UNION ALL\n        SELECT 'Q3 2026 total', COUNT(*), ROUND(100.0*SUM(w1)/COUNT(*),1), ROUND(100.0*SUM(w2)/COUNT(*),1), ROUND(100.0*SUM(w4)/COUNT(*),1) FROM a\n  - id: table\n    jq: '[[\"Signup cohort\",\"Users\",\"Week 1 retention % (days 1-7)\",\"Week 2 retention % (days 8-14)\",\"Week 4 retention % (days 22-28)\"]] + ($ret | map([.cohort, .users, .w1_pct, .w2_pct, .w4_pct]))'\n  - id: sheet\n    call: sheets__create_spreadsheet\n    args: { title: \"Retention – Q3 2026 signup cohorts\" }\n  - id: write\n    call: sheets__update_values\n    args: { spreadsheet_id: \"{{ sheet.spreadsheet_id }}\", start_cell: \"A1\", values: \"{{ table }}\" }\n  - id: msg\n    jq: '($ret | map(select(.cohort == \"Q3 2026 total\")) | .[0]) as $t | \"*Retention – Q3 2026 (Jul–Sep signups)*\\n\" + \"Users: \\($t.users) | Week 1: \\($t.w1_pct)% | Week 2: \\($t.w2_pct)% | Week 4: \\($t.w4_pct)%\\n\" + ($ret | map(select(.cohort != \"Q3 2026 total\") | \"• \\(.cohort): \\(.users) users — W1 \\(.w1_pct)%, W2 \\(.w2_pct)%, W4 \\(.w4_pct)%\") | join(\"\\n\")) + \"\\nRetention = share of cohort users with any event in that window after signup.\\nFull table: \\($sheet.url)\"'\n  - id: post\n    call: chat__post_message\n    args: { channel: analytics, text: \"{{ msg }}\" }"
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_018xxcjNNzRZQDwGrFP8bAi5",
+          "content": "{\n  \"status\": \"done\",\n  \"run\": \"r1\",\n  \"outputs\": {\n    \"ret\": \"c4.out\",\n    \"table\": \"c5.out\",\n    \"sheet\": \"c6.out\",\n    \"write\": \"c7.out\",\n    \"msg\": \"c8.out\",\n    \"post\": \"c9.out\"\n  },\n  \"result\": {\n    \"ok\": true,\n    \"channel\": \"analytics\",\n    \"ts\": \"2026-11-14T10:13:19.438Z\"\n  }\n}",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01Dhzv6BeUc8T4ZDHVUyeKbD",
+          "name": "pipe__get",
+          "input": {
+            "handle": "c8.out"
+          },
+          "caller": {
+            "type": "direct"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01Dhzv6BeUc8T4ZDHVUyeKbD",
+          "content": "*Retention – Q3 2026 (Jul–Sep signups)*\nUsers: 354 | Week 1: 97.7% | Week 2: 61.9% | Week 4: 49.7%\n• 2026-07: 121 users — W1 97.5%, W2 62.8%, W4 52.9%\n• 2026-08: 118 users — W1 97.5%, W2 61.9%, W4 44.9%\n• 2026-09: 115 users — W1 98.3%, W2 60.9%, W4 51.3%\nRetention = share of cohort users with any event in that window after signup.\nFull table: https://sheets.example.com/sh1",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSigYKEAgTGAI4AUIIdGhpbmtpbmcSDB6fSb4m3Zs2liht6hoMx1vgxE8d9wEGCmgGIjCRI+QaIoVbxpA0UHTw6169OqlNE0P7NX+sNbQqKEkLInzj/JFJg3zKBOZph+geBpYqpwWa7VZHnLZW+jdtvgc1P2Dftso6/Q9OEpqrZQGfrhCvVBkd4BmVARNjxLrvzWbX3C794KvcEbvD4Ku9XAKvLD5x3sMVnz3k296SLPiQAKpLNEPLyfQVjsDx3hINPXUs6XtbIEWzUxjcx0/7ALUlJt6etERwzR1xTmnO9vkPFd8X6x79ae3I8uzxMPYRRVyVI4nnFQxAM9JyshAiZwojkyQpSc2UBkaWtXKxd4LHniEKRH/nJ8z0K8ktdBSQo9865pAggpTIZSX6WYfdug6c2/kFMmVdZMd0vBIjT9/2xVxlhkGrJqKirTUI8LtPz5T3aOjGhYYb1WykF4vNQNkoWDDFt5sqk5W2a7vWQprbjWvrpZ+dDvDpU2qFys4wQsndp5xnl/FWMSUy8WzDvTCsYIS+sunnHVm5coaqJ7xWkrM0pBVPoGk+Y5naw0y0W8bv8tvMWrmW9r3hRfg8w865RVCaDcXCBDp5TlC5xWG+ZEpfEmGn4ozwCbjtdKD3Rz9fxGF9VC2JdWU5vuior4lXwLGLr4CvcTl8kcCMQw9oFqHWMyyqlZG8WUpDEw+sJH0yFXVOZXK9kTVlK0EEkRF/WBnVv0ssng1/c16OfnlGK8WVqOO9ZSsOd1Gq02fT28fcPvJ4mQ8eA7aALsGTh5zCFWoECRy4FNaKHDyS7ndlop4Jiw321DHOJiPqQWihpXmyvfQw7fMwJAxlZAbDNEtB22RDfsjVEgRs5HeJ5w8UX6F1TbCZTDM/sRnAH0hS4dDbatlov+kXj2JOLzgKyUcefT/6UxGln8jVEWdInOuVNYUMfZIpsQYFMUsmKT/TUwwVSZWicaP2tpa9RPlchBKJv2tzicIMOXXw33ol3UjuGxongHfotnPlWawOpjyFbbiMcgvPVln9XBbrGAE="
+        },
+        {
+          "type": "text",
+          "text": "I calculated retention for Q3 2026, saved it to a new spreadsheet and posted a summary with the link to #analytics.\n\n**What I measured:** The data runs through 11 Nov 2026, so the last full quarter is Q3 2026 (July to September). I took the 354 users who signed up in Q3 and grouped them by signup month. A user counts as retained in a window if they did anything in the product during it. I used weekly windows (Week 1, Week 2 and Week 4 after signup) because those can be measured completely for every month's signups.\n\n| Signup month | Users | Week 1 (days 1–7) | Week 2 (days 8–14) | Week 4 (days 22–28) |\n|---|---|---|---|---|\n| Jul 2026 | 121 | 97.5% | 62.8% | 52.9% |\n| Aug 2026 | 118 | 97.5% | 61.9% | 44.9% |\n| Sep 2026 | 115 | 98.3% | 60.9% | 51.3% |\n| **Q3 total** | **354** | **97.7%** | **61.9%** | **49.7%** |\n\n- **Drop-off:** About 38% of users go quiet between Week 1 and Week 2. By Week 4, about half are still active.\n- **August is lowest at Week 4:** 44.9%, compared with about 51–53% for July and September.\n- **Week 1 is very high (about 98%):** Activity right after signup, like first logins and page views, probably inflates it. Week 2 and Week 4 are better measures of real retention.\n\nThe table description lists the user ID column as `usr_id`, but in the data it's called `user_id`. I used `user_id`.\n\nSpreadsheet: https://sheets.example.com/sh1"
+        }
+      ]
+    }
+  ]
+}

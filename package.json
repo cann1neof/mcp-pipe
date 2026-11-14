@@ -11,7 +11,8 @@
     "dist",
     "examples",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "skills"
   ],
   "engines": {
     "node": ">=22"

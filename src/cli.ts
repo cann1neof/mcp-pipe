@@ -14,6 +14,7 @@ import type { ServerConfig } from './types.js';
 import { VERSION } from './version.js';
 import { runDemoDbServer } from './demo/sqlite-server.js';
 import { serveHttp } from './http.js';
+import { installSkill } from './skill.js';
 
 const USAGE = `mcp-pipe ${VERSION}
 
@@ -23,6 +24,7 @@ Usage:
   mcp-pipe import <${HOSTS.join('|')}> [--dry-run] [--overwrite] [--host-config <file>] [--config <servers.json>]
                                               move a host's MCP servers behind mcp-pipe
   mcp-pipe demo-db                            run a demo SQLite MCP server (for trying mcp-pipe out)
+  mcp-pipe install-skill [--dir <skills dir>]  copy the mcp-pipe usage skill (default ~/.claude/skills/mcp-pipe)
 `;
 
 function flag(argv: string[], name: string): string | undefined {
@@ -105,6 +107,7 @@ async function main(): Promise<void> {
   if (argv.includes('--version')) return void console.log(VERSION);
   if (argv[0] === 'import') return runImport(argv);
   if (argv[0] === 'demo-db') return runDemoDbServer();
+  if (argv[0] === 'install-skill') { installSkill(flag(argv, '--dir')); return; }
   if (argv[0] && !argv[0].startsWith('--')) throw new Error(`unknown command "${argv[0]}"\n\n${USAGE}`);
   return runProxy(argv);
 }

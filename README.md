@@ -21,7 +21,10 @@ npx -y mcp-pipe import claude-desktop --dry-run   # see what moves
 npx -y mcp-pipe import claude-desktop             # move your servers behind mcp-pipe (backup written)
 ```
 
-Restart Claude Desktop. Your tools are now `<server>__<tool>`, plus the `pipe__*` tools. Also: `claude-code`, `cursor`, or [add it by hand](https://cann1neof.github.io/mcp-pipe/guide/install).
+Restart Claude Desktop. Your tools are now `<server>__<tool>`, plus the `pipe__*` tools.
+
+mcp-pipe only exposes tools. How the AI should use them (refs instead of copying, compute in jq, patch, pipes) is in a skill: install it with `npx -y mcp-pipe install-skill` (writes `~/.claude/skills/mcp-pipe/SKILL.md`; `--dir` for other harnesses), or copy [skills/mcp-pipe/SKILL.md](skills/mcp-pipe/SKILL.md) wherever your harness keeps skills.
+ Also: `claude-code`, `cursor`, or [add it by hand](https://cann1neof.github.io/mcp-pipe/guide/install).
 
 No servers to try it on? `npx -y mcp-pipe demo-db` is a demo SQLite shop database you can wrap.
 

@@ -9,10 +9,10 @@ import { mcpTools, runAgent } from './agent.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (fs.existsSync(path.join(root, '.env'))) process.loadEnvFile(path.join(root, '.env'));
 
-// DEMO_SKILL=<dir under bench/skills>: the prompt carries that skill's text, the way a harness loads a skill.
+// DEMO_SKILL=<dir under bench/skills, or a path to a SKILL.md>: the prompt carries that skill's text, the way a harness loads a skill.
 // DEMO_NO_INSTRUCTIONS=1: the server's MCP instructions are not passed (some hosts drop them).
 const skillName = process.env.DEMO_SKILL;
-const skill = skillName ? fs.readFileSync(path.join(root, 'bench', 'skills', skillName, 'SKILL.md'), 'utf8') : undefined;
+const skill = skillName ? fs.readFileSync((skillName.includes('/') ? path.resolve(root, skillName) : path.join(root, 'bench', 'skills', skillName, 'SKILL.md')), 'utf8') : undefined;
 const BASE = process.argv[2] ??
   'count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics';
 

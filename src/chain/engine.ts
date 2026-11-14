@@ -90,7 +90,10 @@ export class Engine {
     const vars: Record<string, unknown> = {};
     const hidden = new Set<string>();
     for (const n of jqVars(src)) {
-      const t = this.extra(r)(n);
+      let t = this.extra(r)(n);
+      if (!t && /^c\d+$/.test(n)) {
+        try { t = this.core.resolver()(`${n}.out`); } catch (e) { throw new StepFailure(`$${n}: ${(e as Error).message}`); }
+      }
       if (!t) throw new StepFailure(`$${n} is not available (no such param, or step "${n}" has not finished)`);
       vars[n] = t.value;
       t.hiddenFrom?.forEach((h) => hidden.add(h));
@@ -159,7 +162,6 @@ export class Engine {
         this.save(r);
         return {
           status: 'failed', run: r.id, step: step.id, error: msg, outputs: this.outputs(r),
-          next: `fix it with pipe__patch {"run":"${r.id}","step":"${step.id}","edits":[…]} (re-runs from that step)`,
         };
       }
     }
@@ -274,15 +276,10 @@ export class Engine {
       }
       return entry;
     });
-    const resumeCall = `pipe__resume({"run":"${r.id}","step":"${stepId}",${multi ? '"chunk":<index>,' : ''}"output":<result>})`;
-    const next = by === 'subagent'
-      ? `Spawn a subagent${multi ? ' per open chunk (they can run in parallel)' : ''}. It reads its input with pipe__get({"handle":"<inputHandle>"}), does the task, then calls ${resumeCall}.`
-      : `Do the task on ${multi ? 'each open chunk\'s' : 'the'} input, then call ${resumeCall}.`;
     return {
       status: 'paused', run: r.id, step: stepId, by, task,
       ...(s.expect ? { expect: s.expect } : {}),
       ...(multi ? { chunks } : { inputHandle: chunks[0]?.inputHandle, ...(by === 'session' ? { input: chunks[0]?.input } : {}) }),
-      next,
     };
   }
 

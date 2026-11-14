@@ -1,0 +1,202 @@
+prompt: count the retention rates in the last quarter using table `users_data`, put the results into a new spreadsheet and post a short summary with the link to #analytics
+
+<skill name="skills/mcp-pipe/SKILL.md">
+---
+name: mcp-pipe
+description: How to work with tools served through mcp-pipe (tools named <server>__<tool> plus pipe__run, pipe__patch, pipe__transform, pipe__map, pipe__get, pipe__resume). Use for any task that calls these tools, especially when data from one tool goes into another, a list needs one call per item, or a call has to be fixed and repeated.
+---
+
+# Working with mcp-pipe
+
+mcp-pipe sits between you and the MCP servers. It saves every call: its arguments and its result. Each result ends with its reference, for example `saved as {{ c7.out }}`. Work with these references instead of with the data itself.
+
+## Rules
+
+1. **Never copy data from a result into another call.** Pass the reference instead. mcp-pipe fills in the value before the call:
+   - the whole result: `"{{ c7.out }}"`
+   - a part: `"{{ c7.out.rows[0].id }}"`
+   - reshaped with jq: `"{{ c7.out | map([.name, .total]) }}"`
+   - any jq expression over saved results: `"{{ [["Name", "Total"]] + (c7.out | map([.name, .total])) }}"`
+
+   A string that is exactly one reference becomes the value with its own type (array, object, number). A reference inside longer text is inserted as text.
+2. **Compute in the tools, not in your head.** Percentages, totals, rounding, formatting and joins belong in the query (SQL) or in jq over a saved result. Write the formula, not the numbers.
+3. **Fix a call by patching it, not by rewriting it.** `pipe__patch {"call": "c3", "edits": [{"find": "usr_id", "replace": "user_id"}]}` copies the saved arguments, applies the change and runs the call again. Edits are `{find, replace}` (text in string arguments) or `{path, set}` (any value).
+4. **Read only what you need.** Large results come back as a preview. Use `pipe__get {"handle": "c7.out.rows", "jq": ".[0:5]"}` or a path like `c7.out.rows[0].id` for the part you need, not the whole value.
+5. **`pipe__transform` must transform its input.** It applies jq to a saved value and saves the result under a new reference. A filter that ignores its input is refused; pass literal values directly in the tool argument instead.
+
+## Workflow
+
+1. **Look first, with single calls.** Read schemas and descriptions, take small samples (`LIMIT 3`), check date ranges and IDs. Don't trust metadata blindly: if a call fails on a name from the docs, check the real one, then patch.
+2. **Then write the rest as one pipe** and run it with `pipe__run`. Do this as soon as you know the remaining steps, especially when one step's output feeds the next. The steps run back to back without a round trip through you, and no intermediate data enters the conversation.
+3. **If a step fails, patch that step.** `pipe__patch {"run": "r1", "step": "cohorts", "edits": [...]}` edits the step and continues the run from it. Earlier steps are not repeated. Don't write a new pipe.
+4. **Report from the outputs.** The reply lists each step's reference and the last step's result. Use `pipe__get` on a step output if you need to show part of it.
+
+Single calls are fine for one-off lookups. Use a pipe once there are two or more dependent steps.
+
+## Pipe format
+
+`pipe__run {"chain": <YAML or JSON>, "params": {...}}`:
+
+```yaml
+params: { sql: string, channel: string }
+steps:
+  - id: rows                      # a tool call
+    call: db__run_query
+    args: { sql: "{{ sql }}" }
+  - id: table                     # jq: params and earlier steps are $variables
+    jq: '[["Country", "Revenue"]] + ($rows | map([.country, .revenue]))'
+  - id: sheet
+    call: sheets__create_spreadsheet
+    args: { title: "Revenue" }
+  - id: write                     # earlier steps as references in arguments
+    call: sheets__update_values
+    args: { spreadsheet_id: "{{ sheet.spreadsheet_id }}", start_cell: "A1", values: "{{ table }}" }
+  - id: notify                    # one call per item of a list
+    map: chat__post_message
+    over: rows
+    args: { channel: "{{ channel }}", text: "{{ item.country }}: {{ item.revenue }}" }
+```
+
+- In `args`, `{{ name }}` refers to a param, an earlier step id, or any saved call (`c7.out`), and `{{ <jq expression> }}` can combine them: `{{ "Sheet: " + sheet.url }}`. In `jq` steps they are variables: `$rows`, `$c7`.
+- A pipe can start from calls you already made: refer to them as `c7.out` / `$c7` instead of repeating them.
+- `map` steps call a tool once per item: `{{ item }}`, `{{ item.path }}`. Items that already succeeded are skipped when the step runs again.
+- `dry_run: true` checks the pipe and returns the plan without running it. `from: "<step>"` runs again from a step.
+
+### Steps that need judgement
+
+An `ai` step pauses the run for work only a model can do (translate, classify, summarise):
+
+```yaml
+  - id: tr
+    ai: "Translate each item to Hebrew. Return a JSON array, same order, same length."
+    input: '$boxes | map(.text)'
+    by: subagent                  # or session
+    batch: 20
+    expect: { type: array, items: { type: string }, sameLengthAs: boxes }
+```
+
+The reply has `status: "paused"`, the `task`, and the input (inline for `by: session`, or as `inputHandle` per chunk for `by: subagent`).
+- **`by: session`:** do the task on the input yourself, then call `pipe__resume {"run", "step", "output"}`.
+- **`by: subagent`:** start one subagent per open chunk. Each one reads its input with `pipe__get {"handle": "<inputHandle>"}`, does the task and calls `pipe__resume {"run", "step", "chunk", "output"}`. Don't read the input yourself.
+
+`output` is checked against `expect`. If it doesn't match, the reply says why and the run stays paused.
+
+## Reusing a pipe
+
+mcp-pipe stores no named workflows. When the user wants to keep a pipe that worked, write it into a skill: a short description of when to use it, the params, and the YAML. Next time, read the skill, change tool or column names if they differ, and pass the YAML to `pipe__run`.
+
+## Per-item work outside a pipe
+
+`pipe__map {"tool": "crm__update", "over": "c5.out", "args": {"id": "{{ item.id }}"}}` calls a tool once per item of a saved list in one request, and returns the counts, failures and one reference per call.
+</skill>
+model: claude-opus-5-5
+server instructions: off
+  system: (none)
+  tools: chat__list_channels, chat__post_message, db__run_query, db__get_table_description, sheets__create_spreadsheet, sheets__update_values, sheets__get_values, pipe__get, pipe__patch, pipe__transform, pipe__map, pipe__run, pipe__resume
+  ── turn 1: in=7116 out=145 stop=tool_use
+  AI: I'll start by checking the table structure.
+  → db__get_table_description {"table":"users_data"}
+  → db__run_query {"sql":"SELECT * FROM users_data LIMIT 3"}
+  ← {"table":"users_data","description":"Product analytics events. One row per user event.","columns":[{"name":"event_id","type":"INTEGER","description":"Unique identifier of the event."},{"name":"usr_id","type":"INTEGER","description":"Identifier of the user who performed the event."},{"name":"signup_date","type":"TEXT","description":"Date the user created their account (YYYY-MM-DD)."},{"name":"event_time","type":"TEXT","description":"UTC timestamp of the event (ISO 8601)."},{"name":"event_name","type":"TEXT","description":"Event type: login, page_view, purchase."},{"name":"country","type":"TEXT","description":"ISO 3166-1 alpha-2 country code of the user."},{"name":"plan","type":"TEXT","description":"Subscription plan at the time of the event: free, pro, team."}]}
+saved as {{ c1.out }}
+  ← [{"event_id":1,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-02T19:33:10Z","event_name":"purchase","country":"GB","plan":"pro"},{"event_id":2,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-01T17:56:42Z","event_name":"page_view","country":"GB","plan":"pro"},{"event_id":3,"user_id":1,"signup_date":"2026-05-29","event_time":"2026-06-17T05:56:48Z","event_name":"page_view","country":"GB","plan":"pro"}]
+saved as {{ c2.out }}
+  ── turn 2: in=7864 out=203 stop=tool_use
+  AI: Note: the docs say `usr_id`, but the real column is `user_id`. Next I'll check the date ranges.
+  → db__run_query {"sql":"SELECT MIN(signup_date) min_signup, MAX(signup_date) max_signup, MIN(event_time) min_ev, MAX(event_time) max_ev, COUNT(DISTINCT user_id) users, COUNT(*) n FROM users_data"}
+  ← [{"min_signup":"2025-10-01","max_signup":"2026-11-04","min_ev":"2025-10-01T14:04:25Z","max_ev":"2026-11-11T23:25:40Z","users":1500,"n":24943}]
+saved as {{ c3.out }}
+  ── turn 3: in=8168 out=1972 stop=tool_use
+  → pipe__run {"chain":"steps:\n  - id: ret\n    call: db__run_query\n    args:\n      sql: |\n        WITH u AS (\n          SELECT user_id, MIN(signup_date) AS signup_date FROM users_data\n          WHERE signup_date BETWEEN '2026-07-01' AND '2026-09-30' GROUP BY user_id),\n        a AS (\n          SELECT u.user_id, substr(u.signup_date,1,7) AS cohort,\n            MAX(CASE WHEN d BETWEEN 1 AND 7 THEN 1 ELSE 0 END) w1,\n            MAX(CASE WHEN d BETWEEN 8 AND 14 THEN 1 ELSE 0 END) w2,\n            MAX(CASE WHEN d BETWEEN 22 AND 28 THEN 1 ELSE 0 END) w4\n          FROM u LEFT JOIN (\n            SELECT user_id, CAST(julianday(date(event_time)) - julianday(signup_date) AS INTEGER) d FROM users_data\n          ) e ON e.user_id = u.user_id\n          GROUP BY u.user_id, cohort)\n        SELECT cohort, COUNT(*) users,\n          ROUND(100.0*SUM(w1)/COUNT(*),1) w1_pct,\n          ROUND(100.0*SUM(w2)/COUNT(*),1) w2_pct,\n          ROUND(100.0*SUM(w4)/COUNT(*),1) w4_pct\n        FROM a GROUP BY cohort\n        UNION ALL\n        SELECT 'Q3 2026 total', COUNT(*), ROUND(100.0*SUM(w1)/COUNT(*),1), ROUND(100.0*SUM(w2)/COUNT(*),1), ROUND(100.0*SUM(w4)/COUNT(*),1) FROM a\n  - id: table\n    jq: '[[\"Signup cohort\",\"Users\",\"Week 1 retention % (days 1-7)\",\"Week 2 retention % (days 8-14)\",\"Week 4 retention % (days 22-28)\"]] + ($ret | map([.cohort, .users, .w1_pct, .w2_pct, .w4_pct]))'\n  - id: sheet\n    call: sheets__create_spreadsheet\n    args: { title: \"Retention – Q3 2026 signup cohorts\" }\n  - id: write\n    call: sheets__update_values\n    args: { spreadsheet_id: \"{{ sheet.spreadsheet_id }}\", start_cell: \"A1\", values: \"{{ table }}\" }\n  - id: msg\n    jq: '($ret | map(select(.cohort == \"Q3 2026 total\")) | .[0]) as $t | \"*Retention – Q3 2026 (Jul–Sep signups)*\\n\" + \"Users: \\($t.users) | Week 1: \\($t.w1_pct)% | Week 2: \\($t.w2_pct)% | Week 4: \\($t.w4_pct)%\\n\" + ($ret | map(select(.cohort != \"Q3 2026 total\") | \"• \\(.cohort): \\(.users) users — W1 \\(.w1_pct)%, W2 \\(.w2_pct)%, W4 \\(.w4_pct)%\") | join(\"\\n\")) + \"\\nRetention = share of cohort users with any event in that window after signup.\\nFull table: \\($sheet.url)\"'\n  - id: post\n    call: chat__post_message\n    args: { channel: analytics, text: \"{{ msg }}\" }"}
+  ← {
+  "status": "done",
+  "run": "r1",
+  "outputs": {
+    "ret": "c4.out",
+    "table": "c5.out",
+    "sheet": "c6.out",
+    "write": "c7.out",
+    "msg": "c8.out",
+    "post": "c9.out"
+  },
+  "result": {
+    "ok": true,
+    "channel": "analytics",
+    "ts": "2026-11-14T10:13:19.438Z"
+  }
+}
+  ── turn 4: in=10298 out=53 stop=tool_use
+  → pipe__get {"handle":"c8.out"}
+  ← *Retention – Q3 2026 (Jul–Sep signups)*
+Users: 354 | Week 1: 97.7% | Week 2: 61.9% | Week 4: 49.7%
+• 2026-07: 121 users — W1 97.5%, W2 62.8%, W4 52.9%
+• 2026-08: 118 users — W1 97.5%, W2 61.9%, W4 44.9%
+• 2026-09: 115 users — W1 98.3%, W2 60.9%, W4 51.3%
+Retention = share of cohort users with any event in that window after signup.
+Full table: https://sheets.example.com/sh1
+  ── turn 5: in=10567 out=597 stop=end_turn
+  AI: I calculated retention for Q3 2026, saved it to a new spreadsheet and posted a summary with the link to #analytics.
+
+**What I measured:** The data runs through 11 Nov 2026, so the last full quarter is Q3 2026 (July to September). I took the 354 users who signed up in Q3 and grouped them by signup month. A user counts as retained in a window if they did anything in the product during it. I used weekly windows (Week 1, Week 2 and Week 4 after signup) because those can be measured completely for every month's signups.
+
+| Signup month | Users | Week 1 (days 1–7) | Week 2 (days 8–14) | Week 4 (days 22–28) |
+|---|---|---|---|---|
+| Jul 2026 | 121 | 97.5% | 62.8% | 52.9% |
+| Aug 2026 | 118 | 97.5% | 61.9% | 44.9% |
+| Sep 2026 | 115 | 98.3% | 60.9% | 51.3% |
+| **Q3 total** | **354** | **97.7%** | **61.9%** | **49.7%** |
+
+- **Drop-off:** About 38% of users go quiet between Week 1 and Week 2. By Week 4, about half are still active.
+- **August is lowest at Week 4:** 44.9%, compared with about 51–53% for July and September.
+- **Week 1 is very high (about 98%):** Activity right after signup, like first logins and page views, probably inflates it. Week 2 and Week 4 are better measures of real retention.
+
+The table description lists the user ID column as `usr_id`, but in the data it's called `user_id`. I used `user_id`.
+
+Spreadsheet: https://sheets.example.com/sh1
+
+== done: 5 turns, 5 tool calls, in=44013 out=2970
+
+== sheets.json
+{
+  "sh1": {
+    "id": "sh1",
+    "title": "Retention – Q3 2026 signup cohorts",
+    "url": "https://sheets.example.com/sh1",
+    "cells": {
+      "A1": "Signup cohort",
+      "B1": "Users",
+      "C1": "Week 1 retention % (days 1-7)",
+      "D1": "Week 2 retention % (days 8-14)",
+      "E1": "Week 4 retention % (days 22-28)",
+      "A2": "2026-07",
+      "B2": 121,
+      "C2": 97.5,
+      "D2": 62.8,
+      "E2": 52.9,
+      "A3": "2026-08",
+      "B3": 118,
+      "C3": 97.5,
+      "D3": 61.9,
+      "E3": 44.9,
+      "A4": "2026-09",
+      "B4": 115,
+      "C4": 98.3,
+      "D4": 60.9,
+      "E4": 51.3,
+      "A5": "Q3 2026 total",
+      "B5": 354,
+      "C5": 97.7,
+      "D5": 61.9,
+      "E5": 49.7
+    }
+  }
+}
+
+== chat.json
+[
+  {
+    "channel": "analytics",
+    "text": "*Retention – Q3 2026 (Jul–Sep signups)*\nUsers: 354 | Week 1: 97.7% | Week 2: 61.9% | Week 4: 49.7%\n• 2026-07: 121 users — W1 97.5%, W2 62.8%, W4 52.9%\n• 2026-08: 118 users — W1 97.5%, W2 61.9%, W4 44.9%\n• 2026-09: 115 users — W1 98.3%, W2 60.9%, W4 51.3%\nRetention = share of cohort users with any event in that window after signup.\nFull table: https://sheets.example.com/sh1",
+    "ts": "2026-11-14T10:13:19.438Z"
+  }
+]
